@@ -1,0 +1,14 @@
+## Interface: 110207, 120000
+## Title: WeakTextures
+## Author: Seva-Drakthul
+## Version: 1.0
+## Notes: Preset-based texture anchoring UI
+## SavedVariables: WeakTexturesDB
+
+core.lua
+helpers.lua
+ui.lua
+modules/presets.lua
+modules/groups.lua
+modules/importexport.lua
+modules/framechooser.lua
