@@ -2,7 +2,10 @@
 -- WeakTextures Groups
 -- =====================================================
 local _, wt = ...
+local L = wt.L
 
+-- Build a tree structure of all groups and presets
+---@return TreeNode
 function wt:BuildGroupTree()
     local tree = { children = {}, presets = {} }
 
@@ -18,13 +21,18 @@ function wt:BuildGroupTree()
     end
 
     tree.children["Ungrouped"] = tree.children["Ungrouped"] or { children = {}, presets = {} }
+    tree.children["Disabled"] = tree.children["Disabled"] or { children = {}, presets = {} }
 
     for groupPath in pairs(WeakTexturesDB.groups or {}) do
         getNode(groupPath)
     end
 
     for presetName, preset in pairs(WeakTexturesDB.presets) do
-        local path = preset.group or "Ungrouped"
+        local path = preset.group
+        -- Empty string or nil means Ungrouped
+        if not path or path == "" then
+            path = "Ungrouped"
+        end
         local node = getNode(path)
         table.insert(node.presets, presetName)
     end
@@ -32,202 +40,129 @@ function wt:BuildGroupTree()
     return tree
 end
 
-function wt:RenderGroupNode(node, name, depth, fullPath)
-    depth = depth or 0
-    fullPath = fullPath or name
-
-    self._renderY = self._renderY or 0
-
-    -- Add delimiter line for Ungrouped and Disabled
-    --[[
-    if name == "Disabled" then
-        local line = wt.content:CreateTexture(nil, "ARTWORK")
-        line:SetSize(220, 3)
-        line:SetPoint("TOPLEFT", 0, -self._renderY)
-        line:SetColorTexture(0.5, 0.5, 0.5, 1) -- Gray line
-        table.insert(wt.presetButtons, line)
-        self._renderY = self._renderY + 3
-    end
-    --]]
-
-    local indent = depth * 12
-    local expanded = wt.groupState[fullPath] ~= false
-
-    -- GROUP BUTTON
-    local count = wt:CountPresetsInGroup(fullPath)
-
-    local header = CreateFrame("Button", nil, wt.content, "UIPanelButtonTemplate")
-    header:SetSize(170 - indent, 22)
-    header:SetPoint("TOPLEFT", indent, -self._renderY)
-    header:SetText(
-        (expanded and "- " or "+ ")
-        .. name
-        .. " (" .. count .. ")"
-    )
-
-    local fs = header:GetFontString()
-    fs:SetJustifyH("LEFT")
-    fs:SetJustifyV("MIDDLE")
-    fs:ClearAllPoints()
-    fs:SetPoint("LEFT", header, "LEFT", 10, 0)
-
-    header:SetScript("OnClick", function()
-        wt.groupState[fullPath] = not expanded
-        wt:RefreshPresetList()
-    end)
-
-
-    table.insert(wt.presetButtons, header)
-
-    -- CLONE GROUP BUTTON
-    local cloneGroup = CreateFrame("Button", nil, wt.content, "UIPanelButtonTemplate")
-    cloneGroup:SetSize(20, 20)
-    cloneGroup:SetPoint("LEFT", header, "RIGHT", 2, 0)
-    cloneGroup:SetText("C")
-    cloneGroup:GetFontString():SetFontObject("GameFontNormalSmall")
-
-    cloneGroup:SetScript("OnClick", function()
-        local newPath = wt:CloneGroupPath(fullPath)
-        wt.groupState[newPath] = true
-        wt:RefreshPresetList()
-    end)
-
-    table.insert(wt.presetButtons, cloneGroup)
-
-    if name == "Disabled" or name == "Ungrouped" then
-        cloneGroup:Hide()
-    end
-
-    -- DELETE GROUP BUTTON
-    local delGroup = CreateFrame("Button", nil, wt.content, "UIPanelButtonTemplate")
-    delGroup:SetSize(20, 20)
-    delGroup:SetPoint("LEFT", cloneGroup, "RIGHT", 2, 0)
-    delGroup:SetText("X")
-
-    delGroup:GetFontString():SetFontObject("GameFontNormalSmall")
-    delGroup:GetFontString():SetTextColor(1, 0.2, 0.2)
-
-    delGroup:SetScript("OnClick", function()
-        wt:DeleteGroupPath(fullPath)
-        wt:allDefault()
-        wt:RefreshPresetList()
-    end)
-
-    table.insert(wt.presetButtons, delGroup)
-
-    if name == "Disabled" or name == "Ungrouped" then
-        delGroup:Hide()
-    end
-
-    self._renderY = self._renderY + 24
-    if not expanded then return end
-
-    -- CHILD GROUPS
-    for childName, childNode in pairs(node.children) do
-        wt:RenderGroupNode(
-            childNode,
-            childName,
-            depth + 1,
-            fullPath .. "/" .. childName
-        )
-    end
-
-    -- PRESETS
-    table.sort(node.presets)
-    for _, presetName in ipairs(node.presets) do
-        -- PRESET BUTTON TO SELECT PRESET
-        local b = CreateFrame("Button", nil, wt.content, "BackdropTemplate, UIPanelButtonTemplate")
-        b:SetSize(150 - indent, 20)
-        b:SetPoint("TOPLEFT", indent + 20, -self._renderY)
-        local icon = wt:GetConditionIconForPreset(presetName)
-
-        if icon then
-            b:SetText("|T" .. icon .. ":14:14:0:-1|t " .. presetName)
-        else
-            b:SetText(presetName)
+-- Show a context menu for a group or preset
+---@param owner Frame
+---@param name string
+---@param fullPath string|nil
+function wt:ShowContextMenu(owner, name, fullPath)
+    local isPreset = WeakTexturesDB.presets[name] ~= nil
+    local isDisabledGroup = (name == "Disabled")
+    local isUngroupedGroup = (name == "Ungrouped")
+    
+    local function GenerateMenu(_, rootDescription)
+        rootDescription:CreateTitle(name)
+        
+        -- For Disabled group, only show Export and Delete options
+        if isDisabledGroup then
+            rootDescription:CreateButton("Export", function()
+                wt:ExportGroup(fullPath)
+            end)
+            rootDescription:CreateButton("Delete", function()
+                StaticPopup_Show("WEAKTEXTURES_DELETE_DISABLED_PRESETS")
+            end)
+            return
         end
-
-        local bfs = b:GetFontString()
-        bfs:SetJustifyH("LEFT")
-        bfs:SetPoint("LEFT", b, "LEFT", 10, 0)
-
-        if wt.selectedPreset == presetName then
-            b:SetBackdrop(wt.selectedBackdrops)
-            b:SetBackdropColor(0, 1, 0, 0.35)
+        
+        -- For Ungrouped group, only show Export and Delete options
+        if isUngroupedGroup then
+            rootDescription:CreateButton("Export", function()
+                wt:ExportGroup(fullPath)
+            end)
+            rootDescription:CreateButton("Delete", function()
+                StaticPopup_Show("WEAKTEXTURES_DELETE_UNGROUPED_PRESETS")
+            end)
+            return
         end
+        
+        -- Copy option
+        rootDescription:CreateButton("Copy", function()
+            if isPreset then
+                local base = name
+                local newName = base
+                local i = 2
 
-        b:SetScript("OnClick", function()
-            wt.selectedPreset = presetName
-            wt:LoadPresetIntoFields(presetName)
-            wt:RefreshPresetList()
-            wt:Debug("Selected preset:", wt.selectedPreset)
-        end)
-
-        table.insert(wt.presetButtons, b)
-
-        -- CLONE PRESET
-        local cloneBtn = CreateFrame("Button", nil, wt.content, "UIPanelButtonTemplate")
-        cloneBtn:SetSize(20, 20)
-        cloneBtn:SetPoint("LEFT", b, "RIGHT", 2, 0)
-        cloneBtn:SetText("C")
-        cloneBtn:GetFontString():SetFontObject("GameFontNormalSmall")
-
-        cloneBtn:SetScript("OnClick", function()
-            local base = presetName
-            local newName = base
-            local i = 2
-
-            while WeakTexturesDB.presets[newName] do
-                newName = base .. " (" .. i .. ")"
-                i = i + 1
-            end
-
-            local function DeepCopy(tbl)
-                local c = {}
-                for k, v in pairs(tbl) do
-                    c[k] = type(v) == "table" and DeepCopy(v) or v
+                while WeakTexturesDB.presets[newName] do
+                    newName = base .. " (" .. i .. ")"
+                    i = i + 1
                 end
-                return c
+
+                local function DeepCopy(tbl)
+                    local c = {}
+                    for k, v in pairs(tbl) do
+                        c[k] = type(v) == "table" and DeepCopy(v) or v
+                    end
+                    return c
+                end
+
+                -- Deep copy the preset
+                local copiedPreset = DeepCopy(WeakTexturesDB.presets[name])
+                WeakTexturesDB.presets[newName] = copiedPreset
+
+                -- Update ADDON_EVENTS table for the new preset
+                if copiedPreset.enabled then
+                    wt:UpdateAddonEventsForPreset(newName, copiedPreset)
+                end
+
+                -- Regenerate event handles since they need to be registered for the new preset
+                if copiedPreset.enabled and copiedPreset.advancedEnabled and copiedPreset.events then
+                    wt:RegisterPresetEvents(newName)
+                end
+
+                -- Ensure instancePool structure exists if source preset had it
+                if copiedPreset.instancePool then
+                    -- Initialize frame pool for the new preset if multi-instance is enabled
+                    if copiedPreset.instancePool.enabled then
+                        wt:InitializeFramePool(newName)
+                    end
+                end
+
+                wt.selectedPreset = newName
+                wt.frame.right:EnableMouse(true)
+                wt.frame.right:Show()
+                wt:LoadPresetIntoFields(newName)
+                wt:RefreshPresetList()
+            else
+                local newPath = wt:CloneGroupPath(fullPath)
+                wt.groupState[newPath] = true
+                wt:RefreshPresetList()
             end
-
-            WeakTexturesDB.presets[newName] =
-                DeepCopy(WeakTexturesDB.presets[presetName])
-
-            wt.selectedPreset = newName
-            wt:RefreshPresetList()
         end)
-
-        table.insert(wt.presetButtons, cloneBtn)
-
-        -- DELETE PRESET
-        local delBtn = CreateFrame("Button", nil, wt.content, "UIPanelButtonTemplate")
-        delBtn:SetSize(20, 20)
-        delBtn:SetPoint("LEFT", cloneBtn, "RIGHT", 2, 0)
-        delBtn:SetText("X")
-        delBtn:GetFontString():SetFontObject("GameFontNormalSmall")
-        delBtn:GetFontString():SetTextColor(1, 0.2, 0.2)
-
-        delBtn:SetScript("OnClick", function()
-            wt:HideTextureFrame(presetName)
-            WeakTexturesDB.presets[presetName] = nil
-            if wt.selectedPreset == presetName then
-                wt:allDefault()
+        
+        -- Export option
+        rootDescription:CreateButton("Export", function()
+            if isPreset then
+                wt:ExportPreset(name)
+            else
+                wt:ExportGroup(fullPath)
             end
-            wt:RefreshPresetList()
         end)
-
-        table.insert(wt.presetButtons, delBtn)
-
-        self._renderY = self._renderY + 22
+        
+        -- Delete option
+        rootDescription:CreateButton("Delete", function()
+            if isPreset then
+                StaticPopup_Show("WEAKTEXTURES_DELETE_PRESET", name, nil, name)
+            else
+                StaticPopup_Show("WEAKTEXTURES_DELETE_GROUP", fullPath, nil, fullPath)
+            end
+        end)
     end
+    
+    MenuUtil.CreateContextMenu(owner, GenerateMenu)
 end
 
+-- Check if a preset is in a group path or its subgroups
+---@param preset Preset
+---@param groupPath string
+---@return boolean
 function wt:IsPresetInGroupPath(preset, groupPath)
     if not preset.group then return false end
+    local escapedPath = groupPath:gsub("([%%%(%)%.%+%-%*%?%[%]%^%$])", "%%%1")
     return preset.group == groupPath
-        or preset.group:match("^" .. groupPath .. "/")
+        or preset.group:match("^" .. escapedPath .. "/")
 end
 
+-- Delete a group and all its presets and subgroups
+---@param groupPath string
 function wt:DeleteGroupPath(groupPath)
     -- Remove presets in this group subtree
     for presetName, preset in pairs(WeakTexturesDB.presets) do
@@ -238,21 +173,20 @@ function wt:DeleteGroupPath(groupPath)
     end
 
     -- Remove group entries
+    local escapedPath = groupPath:gsub("([%%%(%)%.%+%-%*%?%[%]%^%$])", "%%%1")
     for path in pairs(WeakTexturesDB.groups) do
-        if path == groupPath or path:match("^" .. groupPath .. "/") then
+        if path == groupPath or path:match("^" .. escapedPath .. "/") then
             WeakTexturesDB.groups[path] = nil
         end
     end
 
     -- Cleanup UI state
     wt.groupState[groupPath] = nil
-    if wt.selectedGroup == groupPath then
-        wt.selectedGroup = nil
-        wt.selectedPreset = nil
-        wt:allDefault()
-    end
 end
 
+-- Clone a group path with all its presets and subgroups
+---@param sourcePath string
+---@return string
 function wt:CloneGroupPath(sourcePath)
     local base = sourcePath .. " (Copy)"
     local targetPath = base
@@ -309,6 +243,9 @@ function wt:CloneGroupPath(sourcePath)
     return targetPath
 end
 
+-- Count the number of presets in a group (including subgroups)
+---@param groupPath string
+---@return number
 function wt:CountPresetsInGroup(groupPath)
     local count = 0
 
@@ -316,6 +253,10 @@ function wt:CountPresetsInGroup(groupPath)
         -- UNGROUPED
         if groupPath == "Ungrouped" then
             if not preset.group or preset.group == "" then
+                count = count + 1
+            end
+        elseif groupPath == "Disabled" then
+            if preset.enabled == false then
                 count = count + 1
             end
         else
@@ -327,11 +268,13 @@ function wt:CountPresetsInGroup(groupPath)
                 end
             end
         end
+
     end
 
     return count
 end
 
+-- Collapse all groups in the tree
 function wt:CollapseAllGroups()
     wipe(wt.groupState)
 
@@ -342,15 +285,26 @@ function wt:CollapseAllGroups()
     wt.groupState["Ungrouped"] = false
 end
 
+-- Get the icon path for a class
+---@param classFile string|nil
+---@return string|nil iconPath
 function wt:GetClassIcon(classFile)
     if not classFile then return nil end
     return "Interface\\ICONS\\ClassIcon_" .. classFile
 end
 
+-- Get the condition icon for a preset (spec, class, or advanced)
+---@param presetName string
+---@return string|nil iconPath
 function wt:GetConditionIconForPreset(presetName)
     local preset = WeakTexturesDB.presets[presetName]
     if not preset or not preset.conditions then
         return nil
+    end
+
+    if preset.advancedEnabled then
+        -- Use a gear icon for advanced/scripted conditions
+        return "Interface\\Icons\\Trade_Engineering"
     end
 
     -- Spec has priority
@@ -363,6 +317,8 @@ function wt:GetConditionIconForPreset(presetName)
     if preset.conditions.class then
         return self:GetClassIcon(preset.conditions.class)
     end
+
+    
 
     return nil
 end

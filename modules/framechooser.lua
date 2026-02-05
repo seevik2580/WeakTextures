@@ -4,34 +4,34 @@
 
 local _, wt = ...
 
+---@type Frame|nil
 local frameChooserFrame
+---@type Frame|nil
 local frameChooserBox
+---@type Frame|nil
 local oldFocus
+---@type string|nil
 local oldFocusName
 
+---Recursively get the name of a frame
+---@param frame Frame|table
+---@return string|nil frameName
 local function recurseGetName(frame)
-    if not frame then return nil end
-
-    if frame.GetName then
-        local name = frame:GetName()
-        if name then
-            return name
+  local name = frame.GetName and frame:GetName() or nil
+  if name then
+     return name
+  end
+  local parent = frame.GetParent and frame:GetParent()
+  if parent then
+     for key, child in pairs(parent) do
+        if child == frame then
+           return (recurseGetName(parent) or "") .. "." .. key
         end
-    end
-
-    local parent = frame.GetParent and frame:GetParent()
-    if parent then
-        for key, child in pairs(parent) do
-            if child == frame then
-                local parentName = recurseGetName(parent)
-                if parentName then
-                    return parentName .. "." .. key
-                end
-            end
-        end
-    end
+     end
+  end
 end
 
+---Start the interactive frame chooser
 function wt:StartFrameChooser()
     if not frameChooserFrame then
         frameChooserFrame = CreateFrame("Frame")
@@ -60,7 +60,7 @@ function wt:StartFrameChooser()
 
         -- Confirm with left click
         if IsMouseButtonDown("LeftButton") and oldFocusName then
-            wt.anchorEdit:SetText(oldFocusName)
+            wt.frame.right.configPanel.anchorEdit:SetText(oldFocusName)
             wt:StopFrameChooser()
             return
         end
@@ -68,52 +68,82 @@ function wt:StartFrameChooser()
         SetCursor("CAST_CURSOR")
 
         local focus
-        if GetMouseFocus then
-            focus = GetMouseFocus()
-        elseif GetMouseFoci then
+        local focusName
+        
+        -- Try GetMouseFoci first (returns all frames under cursor)
+        if GetMouseFoci then
             local foci = GetMouseFoci()
-            focus = foci and foci[1]
+            if foci then
+                -- Iterate through all frames and find the best match
+                for i, frame in ipairs(foci) do
+                    local name = recurseGetName(frame)
+                    
+                    -- Try to get direct name if recursion failed
+                    if not name and frame.GetName then
+                        name = frame:GetName()
+                    end
+                    
+                    -- Try parent name if still no name
+                    if not name and frame.GetParent then
+                        local parent = frame:GetParent()
+                        if parent then
+                            name = recurseGetName(parent)
+                            if not name and parent.GetName then
+                                name = parent:GetName()
+                            end
+                        end
+                    end
+                    
+                    -- Skip WeakTextures frames, UIParent, and WorldFrame
+                    if name and not name:match("^WeakTextures") 
+                       and name ~= "UIParent" 
+                       and name ~= "WorldFrame" then
+                        focus = frame
+                        focusName = name
+                        break  -- Use first valid frame (highest in z-order)
+                    end
+                end
+            end
+        end
+        
+        -- Fallback to GetMouseFocus
+        if not focus and GetMouseFocus then
+            focus = GetMouseFocus()
+            if focus then
+                focusName = recurseGetName(focus)
+                if not focusName and focus.GetName then
+                    focusName = focus:GetName()
+                end
+                
+                -- Filter out own addon frames
+                if focusName and (focusName:match("^WeakTextures") 
+                   or focusName == "UIParent" 
+                   or focusName == "WorldFrame") then
+                    focusName = nil
+                    focus = nil
+                end
+            end
         end
 
-        local focusName
-
-        if focus then
-            focusName = recurseGetName(focus)
-
-            if not focusName then
-                frameChooserBox:Hide()
-            else
+        if focus and focusName then
+            if focus ~= oldFocus then
                 frameChooserBox:ClearAllPoints()
                 frameChooserBox:SetPoint("BOTTOMLEFT", focus, "BOTTOMLEFT", -4, -4)
                 frameChooserBox:SetPoint("TOPRIGHT", focus, "TOPRIGHT", 4, 4)
                 frameChooserBox:Show()
-            end
-
-            if focusName == "WorldFrame"
-            or focusName == "UIParent"
-            or not focusName then
-                focusName = nil
-            end
-
-            if focus ~= oldFocus then
-                if focusName then
-                    frameChooserBox:ClearAllPoints()
-                    frameChooserBox:SetPoint("BOTTOMLEFT", focus, "BOTTOMLEFT", -4, -4)
-                    frameChooserBox:SetPoint("TOPRIGHT", focus, "TOPRIGHT", 4, 4)
-                    frameChooserBox:Show()
-                else
-                    frameChooserBox:Hide()
-                end
-
+                
                 oldFocus = focus
                 oldFocusName = focusName
             end
         else
             frameChooserBox:Hide()
+            oldFocus = nil
+            oldFocusName = nil
         end
     end)
 end
 
+---Stop the interactive frame chooser
 function wt:StopFrameChooser()
     if frameChooserFrame then
         frameChooserFrame:SetScript("OnUpdate", nil)

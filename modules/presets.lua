@@ -2,22 +2,88 @@
 -- WeakTextures Presets
 -- =====================================================
 local _, wt = ...
+local L = wt.L
 
+-- Apply a single preset (show its texture)
+---@param presetName string
 function wt:ApplyPreset(presetName)
     local preset = WeakTexturesDB.presets[presetName]
-    if not preset or not preset.textures then return end
-
-    if not self:PresetMatchesConditions(presetName) then
+    if not preset or not preset.textures or not preset.textures[1] then 
+        wt:Debug("ApplyPreset: No preset or textures for", presetName)
+        return 
+    end
+    
+    -- Skip ApplyPreset logic for multi-instance presets
+    -- They manage their own lifecycle via CreateInstance + duration timers
+    if preset.instancePool and preset.instancePool.enabled then
+        wt:Debug("ApplyPreset: Skipping for multi-instance preset", presetName)
+        return
+    end
+    
+    if preset.enabled == false then
+        wt:Debug("ApplyPreset: Preset disabled:", presetName)
         self:HideTextureFrame(presetName)
         return
     end
 
+    wt:Debug("ApplyPreset: Processing", presetName, "type:", preset.type)
+
+    -- Check advanced conditions
+    if not wt:CheckPresetAdvancedConditions(presetName) then
+        wt:Debug("ApplyPreset: Advanced conditions failed for", presetName)
+        self:HideTextureFrame(presetName)
+        return
+    end
+
+    local isMatching = self:PresetMatchesConditions(presetName)
+    wt:Debug("ApplyPreset: isMatching =", isMatching, "for", presetName)
+    
+    if wt.isApplyingFromEvent then
+        local wasMatching = wt.lastPresetState[presetName]
+        wt:Debug("ApplyPreset: wasMatching =", wasMatching, "isApplyingFromEvent = true")
+        wt.lastPresetState[presetName] = isMatching
+        
+        if not isMatching then
+            wt:Debug("ApplyPreset: Hiding because not matching")
+            -- Kontrola zda už není skrytý
+            local container = wt.activeFramesByPreset[presetName]
+            local isCurrentlyShown = container and container.frame and container.frame:IsShown()
+            if isCurrentlyShown then
+                self:HideTextureFrame(presetName)
+            end
+            return
+        end
+
+        -- Check if frame actually exists and is shown - if yes, skip recreation
+        local container = wt.activeFramesByPreset[presetName]
+        local frameExists = container and container.frame
+        local isCurrentlyShown = frameExists and container.frame:IsShown()
+        if wasMatching and isCurrentlyShown then
+            wt:Debug("ApplyPreset: Skipping because wasMatching = true and frame is shown")
+            return
+        end
+    elseif not isMatching then
+        -- Not applying from event but conditions don't match
+        wt:Debug("ApplyPreset: Hiding because not matching (not from event)")
+        self:HideTextureFrame(presetName)
+        return
+    end
+
+    -- Check if preset uses v2 multi-instance system
+    if preset.instancePool and preset.instancePool.enabled then
+        wt:Debug("ApplyPreset: Using multi-instance mode for", presetName)
+        -- Multi-instance mode doesn't auto-show, it waits for CreateInstance() calls
+        return
+    end
+
     local data = preset.textures[1]
-    if not data then return end
+    wt:Debug("ApplyPreset: Creating texture for", presetName, "anchor:", data.anchor, "texture:", data.texture)
 
     if preset.type == "motion" then
+        wt:Debug("ApplyPreset: Playing stop motion")
         self:PlayStopMotion(presetName, data.anchor, data.texture, data.width, data.height, data.x, data.y, preset.columns or 1, preset.rows or 1, preset.totalFrames or 1, preset.fps or 30)
     else
+        wt:Debug("ApplyPreset: Creating static texture")
         self:CreateAnchoredTexture(
             presetName,
             data.anchor,
@@ -30,27 +96,195 @@ function wt:ApplyPreset(presetName)
     end
 end
 
+-- Apply all presets that match their conditions
 function wt:ApplyAllPresets()
-    for presetName in pairs(WeakTexturesDB.presets) do
-        self:ApplyPreset(presetName)
+    for presetName, preset in pairs(WeakTexturesDB.presets) do
+        if preset.enabled then
+            self:ApplyPreset(presetName)
+        end
     end
 end
 
+-- Apply only presets registered for a specific event
+---@param event string
+function wt:ApplyPresetsForEvent(event)
+    local presets = WeakTexturesDB.ADDON_EVENTS[event]
+    if not presets then return end
+    
+    for presetName, shouldShow in pairs(presets) do
+        local preset = WeakTexturesDB.presets[presetName]
+        if preset and preset.enabled then
+            if shouldShow then
+                -- true = zkontroluj conditions a zobraz pokud splňuje
+                self:ApplyPreset(presetName)
+            else
+                -- false = rovnou schovej
+                local container = wt.activeFramesByPreset[presetName]
+                local isCurrentlyShown = container and container.frame and container.frame:IsShown()
+                if isCurrentlyShown then
+                    self:HideTextureFrame(presetName)
+                end
+            end
+        end
+    end
+end
+
+-- Load a preset's data into the UI fields
+---@param presetName string
 function wt:LoadPresetIntoFields(presetName)
     local preset = WeakTexturesDB.presets[presetName]
 
     -- NO PRESET / EMPTY PRESET
     if not preset or not preset.textures then
         wt:allDefault()
-        wt.presetNameEdit:SetText(presetName or "")
-        wt.groupEditBox:SetText(preset and preset.group or "")
-        wt.enabledCheck:SetChecked(preset and preset.enabled ~= false or true)
+        wt.frame.right.configPanel.presetNameEdit:SetText(presetName or "")
+        
+        -- Set group dropdown
+        local groupName = preset and preset.group or ""
+        if groupName and groupName ~= "" and WeakTexturesDB.groups[groupName] then
+            wt.frame.right.configPanel.groupDropDown.selectedValue = groupName
+            wt.frame.right.configPanel.groupEditBox:Hide()
+        else
+            wt.frame.right.configPanel.groupDropDown.selectedValue = ""
+            wt.frame.right.configPanel.groupEditBox:Hide()
+        end
+        
+        wt.frame.right.conditionsPanel.enabledCheck:SetChecked(preset and preset.enabled ~= false or true)
         return
     end
+    
+    -- PRESET NAME + GROUP
+    wt.frame.right.configPanel.presetNameEdit:SetText(presetName)
 
+    local displayGroup = preset.group
+    if preset.group == "Disabled" and preset.originalGroup then
+        displayGroup = preset.originalGroup
+    end
+    
+    -- Set group dropdown
+    if displayGroup and displayGroup ~= "" and displayGroup ~= "Disabled" and WeakTexturesDB.groups[displayGroup] then
+        wt.frame.right.configPanel.groupDropDown.selectedValue = displayGroup
+        wt.frame.right.configPanel.groupEditBox:Hide()
+    else
+        wt.frame.right.configPanel.groupDropDown.selectedValue = ""
+        wt.frame.right.configPanel.groupEditBox:Hide()
+    end
+
+    -- TEXTURE DATA
+    local data = preset.textures[1]
+    if data then
+        local anchorValue = data.anchor or "UIParent"
+        wt.frame.right.configPanel.anchorEdit:SetText(anchorValue)
+        
+        -- Set anchor type dropdown based on anchor value
+        if anchorValue == "UIParent" or anchorValue == "" then
+            wt.frame.right.configPanel.anchorTypeDropDown.selectedValue = "Screen"
+            wt.frame.right.configPanel.anchorEdit:Hide()
+            wt.frame.right.configPanel.selectFrameBtn:Hide()
+        else
+            wt.frame.right.configPanel.anchorTypeDropDown.selectedValue = "Custom"
+            wt.frame.right.configPanel.anchorEdit:Show()
+            wt.frame.right.configPanel.selectFrameBtn:Show()
+        end
+        
+        -- Check if texture is from LSM or WeakTexturesCustomTextures
+        local texturePath = data.texture or ""
+        local foundTexture = false
+        
+        -- First check WeakTexturesCustomTextures
+        if WeakTexturesCustomTextures then
+            for textureName, customPath in pairs(WeakTexturesCustomTextures) do
+                if customPath == texturePath then
+                    local displayName = textureName:gsub("^WT_", "")  -- Remove WT_ prefix for display
+                    wt.frame.right.configPanel.textureDropDown.selectedValue = displayName
+                    wt.frame.right.configPanel.textureDropDown.selectedPath = customPath
+                    wt.frame.right.configPanel.textureCustomEdit:Hide()
+                    foundTexture = true
+                    break
+                end
+            end
+        end
+        
+        -- If not found in custom textures, check all LSM categories
+        if not foundTexture then
+            for _, category in ipairs({"background", "border", "statusbar"}) do
+                local textures = wt.LSM:List(category)
+                for _, textureName in ipairs(textures) do
+                    local lsmPath = wt.LSM:Fetch(category, textureName)
+                    if lsmPath == texturePath then
+                        wt.frame.right.configPanel.textureDropDown.selectedValue = textureName
+                        wt.frame.right.configPanel.textureDropDown.selectedPath = lsmPath
+                        wt.frame.right.configPanel.textureCustomEdit:Hide()
+                        foundTexture = true
+                        break
+                    end
+                end
+                if foundTexture then break end
+            end
+        end
+        
+        -- If not found anywhere, use Custom
+        if not foundTexture then
+            wt.frame.right.configPanel.textureDropDown.selectedValue = "Custom"
+            wt.frame.right.configPanel.textureDropDown.selectedPath = nil
+            wt.frame.right.configPanel.textureCustomEdit:SetText(texturePath)
+            wt.frame.right.configPanel.textureCustomEdit:Show()
+        end
+        
+        wt.frame.right.configPanel.widthEdit:SetText(data.width and tostring(data.width) or "")
+        wt.frame.right.configPanel.heightEdit:SetText(data.height and tostring(data.height) or "")
+        wt.frame.right.configPanel.xOffsetEdit:SetText(data.x and tostring(data.x) or "")
+        wt.frame.right.configPanel.yOffsetEdit:SetText(data.y and tostring(data.y) or "")
+    end
+
+    -- TYPE
+    local presetType = preset.type or "static"
+    local typeText = presetType == "motion" and "Stop Motion" or "Static"
+    wt.frame.right.configPanel.ftypeDropDown.selectedValue = typeText
+    if presetType == "motion" then
+        wt:SetShownMotionFields(true)
+        wt.frame.right.configPanel.columnsEdit:SetText(preset.columns and tostring(preset.columns) or "")
+        wt.frame.right.configPanel.rowsEdit:SetText(preset.rows and tostring(preset.rows) or "")
+        wt.frame.right.configPanel.totalFramesEdit:SetText(preset.totalFrames and tostring(preset.totalFrames) or "")
+        wt.frame.right.configPanel.fpsEdit:SetText(preset.fps and tostring(preset.fps) or "")
+    else
+        wt:SetShownMotionFields(false)
+    end
+    -- SCALE
+    wt.frame.right.configPanel.scaleEdit:SetText(preset.scale and tostring(preset.scale) or "1.0")
+    
+    -- ALPHA
+    wt.frame.right.configPanel.alphaEdit:SetText(preset.alpha and tostring(preset.alpha) or "1.0")
+    
+    -- ANGLE
+    wt.frame.right.configPanel.angleEdit:SetText(preset.angle and tostring(preset.angle) or "0")
+
+    -- STRATA
+    local strata = preset.strata or "MEDIUM"
+    wt.frame.right.configPanel.strataDropDown.selectedValue = strata
+
+    -- FRAME LEVEL
+    wt.frame.right.configPanel.frameLevelEdit:SetText(preset.frameLevel and tostring(preset.frameLevel) or "100")
+
+    -- Enable unlock button for existing preset
+    wt.frame.right.configPanel.unlockFrameBtn:Enable()
+    wt.frame.right.configPanel.unlockFrameBtn:SetNormalAtlas(wt.buttonNormal)
+    
     -- RESET DROPDOWNS FIRST
-    UIDropDownMenu_SetText(wt.classDropDown, "Any Class")
-    UIDropDownMenu_SetText(wt.specDropDown, "Any Spec")
+    wt.frame.right.conditionsPanel.classDropDown.selectedValue = "Any Class"
+    wt.frame.right.conditionsPanel.specDropDown.selectedValue = "Any Spec"
+
+    -- Reset checkboxes
+    wt.frame.right.conditionsPanel.aliveCheck:SetState(0)
+    wt.frame.right.conditionsPanel.combatCheck:SetState(0)
+    wt.frame.right.conditionsPanel.restedCheck:SetState(0)
+    wt.frame.right.conditionsPanel.encounterCheck:SetState(0)
+    wt.frame.right.conditionsPanel.petBattleCheck:SetState(0)
+    wt.frame.right.conditionsPanel.vehicleCheck:SetState(0)
+    wt.frame.right.conditionsPanel.instanceCheck:SetState(0)
+    wt.frame.right.conditionsPanel.housingCheck:SetState(0)
+    wt.frame.right.conditionsPanel.playerNameEdit:SetText("")
+    wt.frame.right.conditionsPanel.zoneEdit:SetText("")
 
     -- CONDITIONS
     if preset.conditions then
@@ -58,7 +292,7 @@ function wt:LoadPresetIntoFields(presetName)
         if preset.conditions.class then
             for _, class in ipairs(self:GetAllClasses()) do
                 if class.file == preset.conditions.class then
-                    UIDropDownMenu_SetText(wt.classDropDown, class.name)
+                    wt.frame.right.conditionsPanel.classDropDown.selectedValue = class.name
                     break
                 end
             end
@@ -68,56 +302,93 @@ function wt:LoadPresetIntoFields(presetName)
         if preset.conditions.class and preset.conditions.spec then
             for _, spec in ipairs(self:GetSpecsForClass(preset.conditions.class)) do
                 if spec.id == preset.conditions.spec then
-                    UIDropDownMenu_SetText(wt.specDropDown, spec.name)
+                    wt.frame.right.conditionsPanel.specDropDown.selectedValue = spec.name
                     break
                 end
             end
         end
+
+        -- Checkboxes
+        if preset.conditions.alive and not preset.conditions.dead then
+            wt.frame.right.conditionsPanel.aliveCheck:SetState(1)
+        elseif not preset.conditions.alive and preset.conditions.dead then
+            wt.frame.right.conditionsPanel.aliveCheck:SetState(-1)
+        else
+            wt.frame.right.conditionsPanel.aliveCheck:SetState(0)
+        end
+        if preset.conditions.combat and not preset.conditions.notCombat then
+            wt.frame.right.conditionsPanel.combatCheck:SetState(1)
+        elseif not preset.conditions.combat and preset.conditions.notCombat then
+            wt.frame.right.conditionsPanel.combatCheck:SetState(-1)
+        else
+            wt.frame.right.conditionsPanel.combatCheck:SetState(0)
+        end
+        if preset.conditions.rested and not preset.conditions.notRested then
+            wt.frame.right.conditionsPanel.restedCheck:SetState(1)
+        elseif not preset.conditions.rested and preset.conditions.notRested then
+            wt.frame.right.conditionsPanel.restedCheck:SetState(-1)
+        else
+            wt.frame.right.conditionsPanel.restedCheck:SetState(0)
+        end
+        if preset.conditions.encounter and not preset.conditions.notEncounter then
+            wt.frame.right.conditionsPanel.encounterCheck:SetState(1)
+        elseif not preset.conditions.encounter and preset.conditions.notEncounter then
+            wt.frame.right.conditionsPanel.encounterCheck:SetState(-1)
+        else
+            wt.frame.right.conditionsPanel.encounterCheck:SetState(0)
+        end
+        if preset.conditions.petBattle and not preset.conditions.notPetBattle then
+            wt.frame.right.conditionsPanel.petBattleCheck:SetState(1)
+        elseif not preset.conditions.petBattle and preset.conditions.notPetBattle then
+            wt.frame.right.conditionsPanel.petBattleCheck:SetState(-1)
+        else
+            wt.frame.right.conditionsPanel.petBattleCheck:SetState(0)
+        end
+        if preset.conditions.vehicle and not preset.conditions.notVehicle then
+            wt.frame.right.conditionsPanel.vehicleCheck:SetState(1)
+        elseif not preset.conditions.vehicle and preset.conditions.notVehicle then
+            wt.frame.right.conditionsPanel.vehicleCheck:SetState(-1)
+        else
+            wt.frame.right.conditionsPanel.vehicleCheck:SetState(0)
+        end
+        if preset.conditions.instance and not preset.conditions.notInstance then
+            wt.frame.right.conditionsPanel.instanceCheck:SetState(1)
+        elseif not preset.conditions.instance and preset.conditions.notInstance then
+            wt.frame.right.conditionsPanel.instanceCheck:SetState(-1)
+        else
+            wt.frame.right.conditionsPanel.instanceCheck:SetState(0)
+        end
+        if preset.conditions.housing and not preset.conditions.nothousing then
+            wt.frame.right.conditionsPanel.housingCheck:SetState(1)
+        elseif not preset.conditions.housing and preset.conditions.nothousing then
+            wt.frame.right.conditionsPanel.housingCheck:SetState(-1)
+        else
+            wt.frame.right.conditionsPanel.housingCheck:SetState(0)
+        end
+        wt.frame.right.conditionsPanel.playerNameEdit:SetText(preset.conditions.playerName or "")
+        wt.frame.right.conditionsPanel.zoneEdit:SetText(preset.conditions.zone or "")
     end
 
-    -- STRATA
-    local strata = preset.strata or "MEDIUM"
-    UIDropDownMenu_SetSelectedValue(wt.strataDropDown, strata)
-    UIDropDownMenu_SetText(wt.strataDropDown, strata)
+    -- ADVANCED CONDITIONS
+    local advancedEnabled = preset.advancedEnabled or false
+    wt.frame.right.conditionsPanel.advancedCheck:SetChecked(advancedEnabled)
+    wt:ToggleAdvancedTab(advancedEnabled)
+    
+    wt.frame.right.advancedPanel.eventsEdit:SetText(wt:EventsToString(preset.events or {}))
+    wt.frame.right.advancedPanel.durationEdit:SetText(tostring(preset.duration or ""))
+    wt.frame.right.advancedPanel.triggerEdit:SetText(preset.trigger or "")
 
-    -- FRAME LEVEL
-    wt.frameLevelEdit:SetText(preset.frameLevel and tostring(preset.frameLevel) or "100")
+    -- Multi-Instance checkbox state
+    local multiInstanceEnabled = preset.instancePool and preset.instancePool.enabled or false
+    wt.frame.right.advancedPanel.multiInstanceCheck:SetChecked(multiInstanceEnabled)
 
-    -- TEXTURE DATA (SINGLE)
-    local data = preset.textures[1]
-    if data then
-        wt.anchorEdit:SetText(data.anchor or "")
-        wt.textureEdit:SetText(data.texture or "")
-        wt.widthEdit:SetText(data.width and tostring(data.width) or "")
-        wt.heightEdit:SetText(data.height and tostring(data.height) or "")
-        wt.xOffsetEdit:SetText(data.x and tostring(data.x) or "")
-        wt.yOffsetEdit:SetText(data.y and tostring(data.y) or "")
-    end
-    -- PRESET NAME + GROUP
-    wt.presetNameEdit:SetText(presetName)
-
-    local displayGroup = preset.group
-    if preset.group == "Disabled" and preset.originalGroup then
-        displayGroup = preset.originalGroup
-    end
-    wt.groupEditBox:SetText(displayGroup or "")
-
-    -- TYPE
-    local presetType = preset.type or "static"
-    UIDropDownMenu_SetText(wt.typeDropDown, presetType == "motion" and "Stop Motion" or "Static")
-    if presetType == "motion" then
-        wt:ShowMotionFields()
-        wt.columnsEdit:SetText(preset.columns and tostring(preset.columns) or "")
-        wt.rowsEdit:SetText(preset.rows and tostring(preset.rows) or "")
-        wt.totalFramesEdit:SetText(preset.totalFrames and tostring(preset.totalFrames) or "")
-        wt.fpsEdit:SetText(preset.fps and tostring(preset.fps) or "")
-    else
-        wt:HideMotionFields()
-    end
-
-    wt.enabledCheck:SetChecked(preset.enabled ~= false)
+    wt.frame.right.conditionsPanel.enabledCheck:SetChecked(preset.enabled ~= false)
 end
 
+-- Rename a preset
+---@param oldName string
+---@param newName string
+---@return string
 function wt:RenamePreset(oldName, newName)
     if oldName == newName then return oldName end
     if WeakTexturesDB.presets[newName] then
@@ -133,6 +404,14 @@ function wt:RenamePreset(oldName, newName)
     if wt.activeFramesByPreset[oldName] then
         wt.activeFramesByPreset[newName] = wt.activeFramesByPreset[oldName]
         wt.activeFramesByPreset[oldName] = nil
+    end
+
+    -- Update ADDON_EVENTS table
+    for event, presets in pairs(WeakTexturesDB.ADDON_EVENTS) do
+        if presets[oldName] then
+            presets[newName] = presets[oldName]
+            presets[oldName] = nil
+        end
     end
 
     return newName

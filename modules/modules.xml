@@ -1,0 +1,15 @@
+<Ui xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://www.blizzard.com/wow/ui/" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\\FrameXML\\UI.xsd">
+	<script file="examples.lua"/>
+    <script file="profiles.lua"/>
+    <script file="instances.lua"/>
+    <script file="presets.lua"/>
+    <script file="groups.lua"/>
+    <script file="importexport.lua"/>
+    <script file="framechooser.lua"/>
+    <script file="tooltip.lua"/>
+    <script file="userevents.lua"/>
+    <script file="settings.lua"/>
+    <script file="api.lua"/>
+</Ui>
+
+
