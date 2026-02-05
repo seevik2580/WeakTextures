@@ -91,7 +91,7 @@ Click **"Save changes"** button
 
 ### Texture and Frame Settings
 - **Texture Path**: Path to your texture file
-  - Supports TGA, PNG, BLP file formats,
+  - Supports TGA, PNG, BLP, JPEG file formats,
 - **Type**: 
   - **Static**: Single image
   - **Stop Motion**: Animated sprite sheet (requires Columns, Rows, Total Frames, FPS)
