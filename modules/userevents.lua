@@ -207,9 +207,11 @@ end
 ---@return any|nil
 function wt:TestTrigger(trigger, debug, presetName)
     if not trigger or trigger == "" then
-        wt.frame.right.advancedPanel.errorEdit:SetText("")
-        wt.frame.right.advancedPanel.errorContainer:Hide()
-        wt:UpdateTriggerLineNumbers() -- Reset line numbers to normal
+        if wt.frame and wt.frame.right and wt.frame.right.advancedPanel then
+            wt.frame.right.advancedPanel.errorEdit:SetText("")
+            wt.frame.right.advancedPanel.errorContainer:Hide()
+            wt:UpdateTriggerLineNumbers() -- Reset line numbers to normal
+        end
         return false
     end
 
@@ -264,8 +266,10 @@ function wt:TestTrigger(trigger, debug, presetName)
             errorText = errorText .. violation.type .. " '" .. name .. "' is not allowed to be used on lines: " .. linesList .. "\n"
         end
         
-        wt.frame.right.advancedPanel.errorEdit:SetText(errorText)
-        wt.frame.right.advancedPanel.errorContainer:Show()
+        if wt.frame and wt.frame.right and wt.frame.right.advancedPanel then
+            wt.frame.right.advancedPanel.errorEdit:SetText(errorText)
+            wt.frame.right.advancedPanel.errorContainer:Show()
+        end
         
         -- Highlight all error lines
         local errorLinesList = {}
@@ -283,8 +287,10 @@ function wt:TestTrigger(trigger, debug, presetName)
     local func, error = loadstring("return " .. trigger)
     if error then
         if debug then wt:Debug("Trigger compilation error:", error) end
-        wt.frame.right.advancedPanel.errorEdit:SetText(error)
-        wt.frame.right.advancedPanel.errorContainer:Show()
+        if wt.frame and wt.frame.right and wt.frame.right.advancedPanel then
+            wt.frame.right.advancedPanel.errorEdit:SetText(error)
+            wt.frame.right.advancedPanel.errorContainer:Show()
+        end
         
         -- Extract line number from error message
         -- Error format: [string "return ..."]:5: syntax error near 'end'
@@ -308,8 +314,10 @@ function wt:TestTrigger(trigger, debug, presetName)
     local ok, result = xpcall(func, errorHandler)
     if not ok then
         if debug then wt:Debug("Trigger execution error:", result) end
-        wt.frame.right.advancedPanel.errorEdit:SetText("Execution Error:\n" .. tostring(result))
-        wt.frame.right.advancedPanel.errorContainer:Show()
+        if wt.frame and wt.frame.right and wt.frame.right.advancedPanel then
+            wt.frame.right.advancedPanel.errorEdit:SetText("Execution Error:\n" .. tostring(result))
+            wt.frame.right.advancedPanel.errorContainer:Show()
+        end
         
         -- Extract line number from runtime error if present
         local errorLine = result:match("%]:(%d+):")
@@ -327,16 +335,20 @@ function wt:TestTrigger(trigger, debug, presetName)
         for i, err in ipairs(sandboxErrors[envId]) do
             errorText = errorText .. i .. ". " .. err .. "\n"
         end
-        wt.frame.right.advancedPanel.errorEdit:SetText(errorText)
-        wt.frame.right.advancedPanel.errorContainer:Show()
+        if wt.frame and wt.frame.right and wt.frame.right.advancedPanel then
+            wt.frame.right.advancedPanel.errorEdit:SetText(errorText)
+            wt.frame.right.advancedPanel.errorContainer:Show()
+        end
         sandboxErrors[envId] = nil -- Clear after displaying
         return false
     end
 
-    -- Clear error if trigger is valid
-    wt.frame.right.advancedPanel.errorEdit:SetText("")
-    wt.frame.right.advancedPanel.errorContainer:Hide()
-    wt:UpdateTriggerLineNumbers() -- Reset line numbers to normal
+    -- Clear error if trigger is valid (only if UI is loaded)
+    if wt.frame and wt.frame.right and wt.frame.right.advancedPanel then
+        wt.frame.right.advancedPanel.errorEdit:SetText("")
+        wt.frame.right.advancedPanel.errorContainer:Hide()
+        wt:UpdateTriggerLineNumbers() -- Reset line numbers to normal
+    end
 
     -- If result is a function, that's our handler
     if type(result) == "function" then
@@ -407,7 +419,7 @@ end
 function wt:DeRegisterPresetEvents(presetName)
     local preset = WeakTexturesDB.presets[presetName]
     if not preset then return end
-    if not preset.enabled then return end
+    
     wt:Debug("Unregistered event due to no remaining handlers:", presetName)
 
     -- Cancel auto-hide timer if any
@@ -512,8 +524,8 @@ function wt:RegisterPresetEvents(presetName)
                         end)
                     end
                 else
-                    -- Don't auto-hide multi-instance presets
-                    if not (preset.instancePool and preset.instancePool.enabled) then
+                    -- Don't auto-hide multi-instance presets or presets with active timeline
+                    if not (preset.instancePool and preset.instancePool.enabled) and not preset.timelineTimers then
                         wt:HideTextureFrame(presetName)
                     end
                 end
@@ -554,7 +566,10 @@ function wt:RegisterPresetEvents(presetName)
                         end)
                     end
                 else
-                    wt:HideTextureFrame(presetName)
+                    -- Don't auto-hide presets with active timeline
+                    if not preset.timelineTimers then
+                        wt:HideTextureFrame(presetName)
+                    end
                 end
             end
         end

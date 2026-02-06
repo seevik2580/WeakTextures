@@ -31,6 +31,24 @@ function wt:AcquireFrame(presetName)
     -- Try to find an inactive frame
     for _, container in ipairs(pool.frames) do
         if not container.active then
+            -- Preventively cancel any lingering timers before reusing container
+            if container.timelineTimers then
+                for _, timer in ipairs(container.timelineTimers) do
+                    if timer then timer:Cancel() end
+                end
+                container.timelineTimers = nil
+            end
+            
+            if container.autoCleanupTimer then
+                container.autoCleanupTimer:Cancel()
+                container.autoCleanupTimer = nil
+            end
+            
+            if container.animationTimer then
+                container.animationTimer:Cancel()
+                container.animationTimer = nil
+            end
+            
             container.active = true
             pool.activeCount = pool.activeCount + 1
             return container
@@ -52,10 +70,8 @@ end
 function wt:ReleaseFrame(presetName, container)
     if not container or not container.active then return end
     
-    wt:Debug("ReleaseFrame: Hiding and releasing frame for", presetName, "Time:", GetTime())
     container.active = false
     container.frame:Hide()
-    wt:Debug("ReleaseFrame: Frame hidden for", presetName, "IsShown=", container.frame:IsShown())
     
     -- Clear instance data
     if container.instanceData then
@@ -66,6 +82,20 @@ function wt:ReleaseFrame(presetName, container)
     if container.animationTimer then
         container.animationTimer:Cancel()
         container.animationTimer = nil
+    end
+    
+    -- Cancel timeline timers
+    if container.timelineTimers then
+        for _, timer in ipairs(container.timelineTimers) do
+            if timer then timer:Cancel() end
+        end
+        container.timelineTimers = nil
+    end
+    
+    -- Cancel auto-cleanup timer
+    if container.autoCleanupTimer then
+        container.autoCleanupTimer:Cancel()
+        container.autoCleanupTimer = nil
     end
     
     -- Reset text
@@ -92,8 +122,6 @@ function wt:CreateFrameContainer(presetName)
     frame:SetFrameStrata(preset.strata or "MEDIUM")
     frame:SetFrameLevel(preset.frameLevel or 100)
     
-    wt:Debug("CreateFrameContainer: Created frame for", presetName, "parent:", frame:GetParent():GetName() or "unnamed")
-    
     -- Create texture
     local texture = frame:CreateTexture(nil, "ARTWORK")
     texture:SetAllPoints(frame)
@@ -101,15 +129,24 @@ function wt:CreateFrameContainer(presetName)
     -- Create optional font string for text
     local fontString = nil
     if preset.text and preset.text.enabled then
-        fontString = frame:CreateFontString(nil, "OVERLAY")
+        fontString = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         fontString:SetPoint("CENTER", frame, "CENTER", 
-            preset.text.offsetX or 0, 
-            preset.text.offsetY or 125)
+            preset.text.offsetX or wt.TEXT_DEFAULT_OFFSET_X, 
+            preset.text.offsetY or wt.TEXT_DEFAULT_OFFSET_Y)
         
         -- Set font
         local font = preset.text.font or "Fonts\\FRIZQT__.TTF"
-        local size = preset.text.size or 48
-        local outline = preset.text.outline or "OUTLINE"
+        local size = preset.text.size or wt.TEXT_DEFAULT_SIZE
+        local outline = preset.text.outline or wt.TEXT_DEFAULT_OUTLINE
+        
+        -- If font is from LSM, fetch it
+        if not font:match("^Interface") and not font:match("^Fonts") then
+            local lsmFont = wt.LSM:Fetch("font", font)
+            if lsmFont then
+                font = lsmFont
+            end
+        end
+        
         fontString:SetFont(font, size, outline)
         
         -- Set color
@@ -120,8 +157,6 @@ function wt:CreateFrameContainer(presetName)
                 preset.text.color.b or 1,
                 preset.text.color.a or 1
             )
-        else
-            fontString:SetTextColor(1, 1, 1, 1)
         end
         
         -- Set shadow
@@ -148,24 +183,16 @@ end
 ---@param data table
 function wt:CreateInstance(presetName, data)
     local preset = WeakTexturesDB.presets[presetName]
-    wt:Debug("CreateInstance called for", presetName, "data:", data and "yes" or "no")
     
     if not preset then
-        wt:Debug("CreateInstance: Preset not found:", presetName)
         return
     end
     
     if not preset.enabled then
-        wt:Debug("CreateInstance: Preset disabled:", presetName)
         return
     end
     
     if not preset.instancePool or not preset.instancePool.enabled then
-        wt:Debug("CreateInstance: Multi-instance mode not enabled for", presetName)
-        wt:Debug("  preset.instancePool =", preset.instancePool and "exists" or "nil")
-        if preset.instancePool then
-            wt:Debug("  preset.instancePool.enabled =", preset.instancePool.enabled)
-        end
         return
     end
     
@@ -180,9 +207,7 @@ function wt:CreateInstance(presetName, data)
     
     -- Get texture path
     local texturePath = preset.textures and preset.textures[1] and preset.textures[1].texture
-    wt:Debug("CreateInstance: texturePath =", texturePath or "nil")
     if not texturePath then
-        wt:Debug("CreateInstance: No texture configured, releasing frame")
         self:ReleaseFrame(presetName, container)
         return
     end
@@ -192,9 +217,7 @@ function wt:CreateInstance(presetName, data)
     
     -- Apply per-instance texture override if provided
     local texturePath = data.texture or (preset.textures and preset.textures[1] and preset.textures[1].texture)
-    wt:Debug("CreateInstance: texturePath =", texturePath or "nil")
     if not texturePath then
-        wt:Debug("CreateInstance: No texture configured, releasing frame")
         self:ReleaseFrame(presetName, container)
         return
     end
@@ -204,7 +227,6 @@ function wt:CreateInstance(presetName, data)
         local lsmTexture = wt.LSM:Fetch("background", texturePath)
         if lsmTexture then
             texturePath = lsmTexture
-            wt:Debug("CreateInstance: LSM texture resolved to", texturePath)
         end
     end
     
@@ -214,7 +236,6 @@ function wt:CreateInstance(presetName, data)
     local width = textureData.width or 512
     local height = textureData.height or 512
     container.frame:SetSize(width, height)
-    wt:Debug("CreateInstance: Frame size set to", width, "x", height)
     
     -- Set anchor with per-instance offset override
     local anchor = textureData.anchor or "UIParent"
@@ -223,43 +244,41 @@ function wt:CreateInstance(presetName, data)
         local offsetX = data.offsetX or textureData.x or 0
         local offsetY = data.offsetY or textureData.y or 0
         container.frame:SetPoint("CENTER", anchorFrame, "CENTER", offsetX, offsetY)
-        wt:Debug("CreateInstance: Anchored to", anchor, "offset:", offsetX, offsetY)
     end
     
     -- Apply scale with per-instance override
     local scale = data.scale or preset.scale or 1
     container.frame:SetScale(scale)
-    wt:Debug("CreateInstance: Scale set to", scale)
     
     -- Apply alpha with per-instance override
     local alpha = data.alpha or preset.alpha or 1
     container.frame:SetAlpha(alpha)
-    wt:Debug("CreateInstance: Alpha set to", alpha)
     
     -- Apply rotation
     if preset.angle and preset.angle ~= 0 then
         local radians = math.rad(preset.angle)
         container.texture:SetRotation(radians)
-        wt:Debug("CreateInstance: Rotation set to", preset.angle, "degrees")
     end
     
     -- Set text if enabled
-    if container.fontString and data.text then
-        wt:Debug("CreateInstance: Setting text:", data.text)
+    if container.fontString then
+        -- Get text content (use override or fallback to preset default)
+        local textContent = data.text or (preset.text and preset.text.content)
         
-        -- Apply per-instance font if provided
-        if data.font or data.fontSize or data.fontOutline then
-            local font = data.font or preset.text.font or "Fonts\\FRIZQT__.TTF"
-            local size = data.fontSize or preset.text.size or 48
-            local outline = data.fontOutline or preset.text.outline or "OUTLINE"
-            
-            -- If font is from LSM, fetch it
-            if not font:match("^Interface") and not font:match("^Fonts") then
-                font = wt.LSM:Fetch("font", font) or font
+        -- Always apply font settings (use overrides if provided, otherwise use preset defaults)
+        local font = data.font or (preset.text and preset.text.font) or "Fonts\\FRIZQT__.TTF"
+        local size = data.fontSize or (preset.text and preset.text.size) or wt.TEXT_DEFAULT_SIZE
+        local outline = data.fontOutline or (preset.text and preset.text.outline) or wt.TEXT_DEFAULT_OUTLINE
+        
+        -- If font is from LSM, fetch it
+        if not font:match("^Interface") and not font:match("^Fonts") then
+            local lsmFont = wt.LSM:Fetch("font", font)
+            if lsmFont then
+                font = lsmFont
             end
-            
-            container.fontString:SetFont(font, size, outline)
         end
+        
+        container.fontString:SetFont(font, size, outline)
         
         -- Apply per-instance text color if provided
         if data.textColor then
@@ -269,46 +288,59 @@ function wt:CreateInstance(presetName, data)
                 data.textColor.b or 1,
                 data.textColor.a or 1
             )
+        elseif preset.text and preset.text.color then
+            -- Use preset default color
+            container.fontString:SetTextColor(
+                preset.text.color.r, preset.text.color.g,
+                preset.text.color.b, preset.text.color.a)
+        else
+            -- Default gold color like GameFontNormal
+            container.fontString:SetTextColor(wt.TEXT_DEFAULT_COLOR.r, wt.TEXT_DEFAULT_COLOR.g, wt.TEXT_DEFAULT_COLOR.b, wt.TEXT_DEFAULT_COLOR.a)
         end
         
-        container.fontString:SetText(data.text)
+        -- Always apply text offset (use overrides if provided, otherwise use preset defaults)
+        local offsetX = data.textOffsetX or (preset.text and preset.text.offsetX) or wt.TEXT_DEFAULT_OFFSET_X or 0
+        local offsetY = data.textOffsetY or (preset.text and preset.text.offsetY) or wt.TEXT_DEFAULT_OFFSET_Y or 0
+        container.fontString:ClearAllPoints()
+        container.fontString:SetPoint("CENTER", container.frame, "CENTER", offsetX, offsetY)
+        
+        -- Set text content (can be empty string if no default text is defined)
+        container.fontString:SetText(textContent or "")
         container.fontString:Show()
-    elseif data.text then
-        wt:Debug("CreateInstance: Text provided but fontString not created. preset.text.enabled =", preset.text and preset.text.enabled or "false")
     end
     
-    -- Handle animation type
-    if preset.type == "motion" then
-        wt:Debug("CreateInstance: Starting stop motion animation")
+    -- Handle animation type (use override if provided, otherwise use preset default)
+    local animType = data.type or preset.type or "static"
+    
+    if animType == "motion" then
+        -- Get motion parameters (use overrides if provided, otherwise use preset defaults)
+        local columns = data.columns or preset.columns or 1
+        local rows = data.rows or preset.rows or 1
+        local totalFrames = data.totalFrames or preset.totalFrames or 1
+        local fps = data.fps or preset.fps or 30
+        
+        -- Update preset values for animation
+        container.columns = columns
+        container.rows = rows
+        container.totalFrames = totalFrames
+        container.fps = fps
+        
         self:StartStopMotionAnimation(presetName, container)
     else
-        -- Static texture
-        container.texture:SetTexCoord(0, 1, 0, 1)
-        wt:Debug("CreateInstance: Showing static frame at", GetTime())
-        container.frame:Show()
-        local x, y = container.frame:GetCenter()
-        wt:Debug("CreateInstance: Static frame shown at", x, y, "Time:", GetTime())
-    end
-    
-    -- Verify frame is actually visible
-    C_Timer.After(0.1, function()
-        if container.frame then
-            local isShown = container.frame:IsShown()
-            local alpha = container.frame:GetAlpha()
-            local width, height = container.frame:GetSize()
-            local x, y = container.frame:GetCenter()
-            wt:Debug("CreateInstance POST-CHECK: IsShown=", isShown, "Alpha=", alpha, "Size=", width, "x", height, "Pos=", x, y)
-            
-            if not isShown then
-                wt:Debug("CreateInstance WARNING: Frame created but not shown!")
-            end
+        -- Static texture - stop animation if running
+        if container.animationTimer then
+            container.animationTimer:Cancel()
+            container.animationTimer = nil
         end
-    end)
+        
+        -- Reset to full texture
+        container.texture:SetTexCoord(0, 1, 0, 1)
+        container.frame:Show()
+    end
     
     -- Play sound - support both soundKey (from preset.sounds) and direct sound path
     if data.soundKey then
         if preset.sounds and preset.sounds[data.soundKey] then
-            wt:Debug("CreateInstance: Playing sound via soundKey:", data.soundKey)
             self:PlayPresetSound(presetName, data.soundKey)
         else
             -- Fallback: treat soundKey as direct path
@@ -318,11 +350,10 @@ function wt:CreateInstance(presetName, data)
                 local lsmSound = wt.LSM:Fetch("sound", soundPath)
                 if lsmSound then
                     soundPath = lsmSound
-                    wt:Debug("CreateInstance: LSM sound resolved to", soundPath)
                 end
             end
-            wt:Debug("CreateInstance: Playing sound via direct path:", soundPath)
-            PlaySoundFile(soundPath, data.soundChannel or "MASTER")
+            local soundChannel = data.soundChannel or (preset.sound and preset.sound.channel) or "Master"
+            PlaySoundFile(soundPath, soundChannel)
         end
     elseif data.sound then
         -- Alternative: data.sound as direct path
@@ -332,21 +363,110 @@ function wt:CreateInstance(presetName, data)
             local lsmSound = wt.LSM:Fetch("sound", soundPath)
             if lsmSound then
                 soundPath = lsmSound
-                wt:Debug("CreateInstance: LSM sound resolved to", soundPath)
             end
         end
-        wt:Debug("CreateInstance: Playing sound via data.sound:", soundPath)
-        PlaySoundFile(soundPath, data.soundChannel or "MASTER")
+        local soundChannel = data.soundChannel or (preset.sound and preset.sound.channel) or "Master"
+        PlaySoundFile(soundPath, soundChannel)
+    elseif preset.sound and preset.sound.file then
+        -- Use default sound from preset settings (if no data.sound provided)
+        local soundPath = preset.sound.file
+        local soundChannel = data.soundChannel or preset.sound.channel or "Master"
+        
+        if type(soundPath) == "number" then
+            -- FileID, use directly
+            PlaySoundFile(soundPath, soundChannel)
+        elseif type(soundPath) == "string" then
+            -- String path or LSM name
+            if not soundPath:find("[/\\]") then
+                local lsmSound = wt.LSM:Fetch("sound", soundPath)
+                if lsmSound then
+                    soundPath = lsmSound
+                end
+            end
+            PlaySoundFile(soundPath, soundChannel)
+        end
     end
     
-    -- Auto-cleanup after duration
-    local duration = preset.duration or 2.5
-    wt:Debug("CreateInstance: Auto-cleanup timer set for", duration, "seconds")
-    if duration and duration > 0 then
-        C_Timer.After(duration, function()
-            wt:Debug("CreateInstance: Cleanup timer fired after", duration, "seconds for", presetName)
-            self:ReleaseFrame(presetName, container)
-        end)
+    -- Process timeline if provided
+    if data.timeline then
+        container.timelineTimers = {}
+        local duration = preset.duration or 2.5
+        
+        -- Check if timeline has destroy event
+        local hasDestroyEvent = false
+        for _, evt in ipairs(data.timeline) do
+            if evt.destroy then
+                hasDestroyEvent = true
+                break
+            end
+        end
+        
+        for i, event in ipairs(data.timeline) do
+            local delay = event.delay or 0
+            
+            -- Validate delay against duration
+            if not hasDestroyEvent and delay > duration then
+                print(string.format("[WeakTextures] WARNING: Timeline event #%d has delay %.2fs which exceeds preset duration %.2fs", i, delay, duration))
+            end
+            
+            local timer = C_Timer.NewTimer(delay, function()
+                if not container.active then return end
+                
+                -- Update parameters
+                if event.update then
+                    self:UpdateContainerParameters(presetName, container, event.update, preset)
+                end
+                
+                -- Destroy instance
+                if event.destroy then
+                    -- Cancel remaining timeline timers
+                    if container.timelineTimers then
+                        for _, t in ipairs(container.timelineTimers) do
+                            if t then t:Cancel() end
+                        end
+                        container.timelineTimers = nil
+                    end
+                    
+                    -- Cancel auto-cleanup timer if it exists
+                    if container.autoCleanupTimer then
+                        container.autoCleanupTimer:Cancel()
+                        container.autoCleanupTimer = nil
+                    end
+                    
+                    self:ReleaseFrame(presetName, container)
+                end
+            end)
+            
+            table.insert(container.timelineTimers, timer)
+        end
+        
+        -- Auto-cleanup after duration (but NOT if timeline has destroy event)
+        local duration = preset.duration or 2.5
+        if duration and duration > 0 and not hasDestroyEvent then
+            container.autoCleanupTimer = C_Timer.NewTimer(duration, function()
+                if not container.active then return end
+                
+                -- Cancel timeline timers
+                if container.timelineTimers then
+                    for _, timer in ipairs(container.timelineTimers) do
+                        if timer then timer:Cancel() end
+                    end
+                    container.timelineTimers = nil
+                end
+                
+                self:ReleaseFrame(presetName, container)
+            end)
+        end
+    else
+        -- No timeline, use standard auto-cleanup
+        local duration = preset.duration or 2.5
+        if duration and duration > 0 then
+            container.autoCleanupTimer = C_Timer.NewTimer(duration, function()
+                if not container.active then return end
+                
+                self:ReleaseFrame(presetName, container)
+            end)
+        end
     end
 end
 
@@ -362,8 +482,6 @@ function wt:StartStopMotionAnimation(presetName, container)
     local totalFrames = preset.totalFrames or 24
     local fps = preset.fps or 15
     
-    wt:Debug("StartStopMotionAnimation: cols=", columns, "rows=", rows, "total=", totalFrames, "fps=", fps)
-    
     container.currentFrame = 0
     container.elapsed = 0
     
@@ -372,9 +490,7 @@ function wt:StartStopMotionAnimation(presetName, container)
     
     -- Force parent and show
     container.frame:SetParent(UIParent)
-    wt:Debug("StartStopMotionAnimation: Showing frame at", GetTime())
     container.frame:Show()
-    wt:Debug("StartStopMotionAnimation: Frame shown, IsShown=", container.frame:IsShown())
     
     -- Create animation timer
     container.animationTimer = C_Timer.NewTicker(1 / fps, function()
@@ -420,7 +536,7 @@ function wt:PlayPresetSound(presetName, soundKey, channel, directPath)
             local lsmSound = wt.LSM:Fetch("sound", directPath)
             if lsmSound then
                 directPath = lsmSound
-                wt:Debug("PlayPresetSound: LSM sound resolved to", directPath)
+
             end
         end
         PlaySoundFile(directPath, channel or "Master")
@@ -461,6 +577,173 @@ function wt:PlayRandomPresetSound(presetName)
     end
 end
 
+---Update container parameters without restarting animation
+---@param presetName string
+---@param container table
+---@param updates table
+---@param preset table
+function wt:UpdateContainerParameters(presetName, container, updates, preset)
+    if not container or not container.frame or not container.active or not updates then
+        return
+    end
+    
+    local frame = container.frame
+    
+    -- Update alpha
+    if updates.alpha ~= nil then
+        frame:SetAlpha(updates.alpha)
+    end
+    
+    -- Update scale
+    if updates.scale then
+        frame:SetScale(updates.scale)
+    end
+    
+    -- Update texture
+    if updates.texture then
+        local texturePath = updates.texture
+        if not texturePath:find("[/\\]") then
+            local lsmTexture = self.LSM:Fetch("background", texturePath)
+            if lsmTexture then
+                texturePath = lsmTexture
+            end
+        end
+        
+        if container.texture then
+            container.texture:SetTexture(texturePath)
+            if preset.type ~= "motion" then
+                container.texture:SetTexCoord(0, 1, 0, 1)
+            end
+        end
+    end
+    
+    -- Update position
+    if updates.offsetX or updates.offsetY then
+        local textureData = preset.textures and preset.textures[1]
+        if textureData then
+            local anchor = _G[textureData.anchor] or UIParent
+            local baseX = container.instanceData.offsetX or textureData.x or 0
+            local baseY = container.instanceData.offsetY or textureData.y or 0
+            local x = baseX + (updates.offsetX or 0)
+            local y = baseY + (updates.offsetY or 0)
+            frame:ClearAllPoints()
+            frame:SetPoint("CENTER", anchor, "CENTER", x, y)
+        end
+    end
+    
+    -- Update text
+    if container.fontString then
+        if updates.text then
+            container.fontString:SetText(updates.text)
+            container.fontString:Show()
+        end
+        
+        if updates.font or updates.fontSize or updates.fontOutline then
+            local currentFont, currentSize, currentOutline = container.fontString:GetFont()
+            local font = updates.font
+            local fontSize = updates.fontSize or currentSize or wt.TEXT_DEFAULT_SIZE
+            local fontOutline = updates.fontOutline or currentOutline or wt.TEXT_DEFAULT_OUTLINE
+            
+            if font then
+                if not font:match("^Interface") and not font:match("^Fonts") then
+                    font = self.LSM:Fetch("font", font) or font
+                end
+            else
+                font = currentFont or "Fonts\\FRIZQT__.TTF"
+            end
+            
+            container.fontString:SetFont(font, fontSize, fontOutline)
+            
+            -- Restore color after SetFont if no explicit textColor provided
+            if not updates.textColor then
+                if preset.text and preset.text.color then
+                    -- Use preset default color
+                    container.fontString:SetTextColor(
+                        preset.text.color.r, preset.text.color.g,
+                        preset.text.color.b, preset.text.color.a)
+                else
+                    -- Fall back to gold default color
+                    container.fontString:SetTextColor(wt.TEXT_DEFAULT_COLOR.r, wt.TEXT_DEFAULT_COLOR.g, wt.TEXT_DEFAULT_COLOR.b, wt.TEXT_DEFAULT_COLOR.a)
+                end
+            end
+        end
+        
+        if updates.textColor then
+            container.fontString:SetTextColor(
+                updates.textColor.r or 1,
+                updates.textColor.g or 1,
+                updates.textColor.b or 1,
+                updates.textColor.a or 1
+            )
+        end
+        
+        if updates.textOffsetX or updates.textOffsetY or updates.textLeftPoint or updates.textRightPoint then
+            local currentLeftPoint, _, currentRightPoint, currentX, currentY = container.fontString:GetPoint(1)
+            local textOffsetX = updates.textOffsetX or currentX or 0
+            local textOffsetY = updates.textOffsetY or currentY or 0
+            local textLeftPoint = updates.textLeftPoint or currentLeftPoint or "CENTER"
+            local textRightPoint = updates.textRightPoint or currentRightPoint or "CENTER"
+            
+            container.fontString:ClearAllPoints()
+            container.fontString:SetPoint(textLeftPoint, frame, textRightPoint, textOffsetX, textOffsetY)
+        end
+    end
+    
+    -- Play sound
+    if updates.sound then
+        local soundPath = updates.sound
+        local soundChannel = updates.soundChannel or (preset.sound and preset.sound.channel) or "Master"
+        
+        if type(soundPath) == "number" then
+            -- FileID, use directly
+            PlaySoundFile(soundPath, soundChannel)
+        elseif type(soundPath) == "string" then
+            -- String path or LSM name
+            if not soundPath:find("[/\\]") then
+                local lsmSound = self.LSM:Fetch("sound", soundPath)
+                if lsmSound then
+                    soundPath = lsmSound
+                end
+            end
+            PlaySoundFile(soundPath, soundChannel)
+        end
+    elseif updates.soundKey then
+        local soundChannel = updates.soundChannel or (preset.sound and preset.sound.channel) or "Master"
+        self:PlayPresetSound(presetName, updates.soundKey, soundChannel)
+    end
+    
+    -- Handle animation type change (static vs motion)
+    if updates.type then
+        if updates.type == "motion" then
+            -- Get motion parameters (use updates if provided, otherwise container/preset defaults)
+            local columns = updates.columns or container.columns or preset.columns or 1
+            local rows = updates.rows or container.rows or preset.rows or 1
+            local totalFrames = updates.totalFrames or container.totalFrames or preset.totalFrames or 1
+            local fps = updates.fps or container.fps or preset.fps or 30
+            
+            -- Update container values
+            container.columns = columns
+            container.rows = rows
+            container.totalFrames = totalFrames
+            container.fps = fps
+            
+            -- Start/restart stop motion animation
+            self:StartStopMotionAnimation(presetName, container)
+        else
+            -- Static texture - stop animation if running
+            if container.animationTimer then
+                container.animationTimer:Cancel()
+                container.animationTimer = nil
+            end
+            
+            -- Reset to full texture
+            if container.texture then
+                container.texture:SetTexCoord(0, 1, 0, 1)
+            end
+        end
+    end
+end
+
 ---Cleanup all instances for a preset
 ---@param presetName string
 function wt:CleanupAllInstances(presetName)
@@ -471,6 +754,12 @@ function wt:CleanupAllInstances(presetName)
         if container.active then
             self:ReleaseFrame(presetName, container)
         end
+    end
+    
+    -- Clear instance defaults when cleaning up all instances
+    local preset = WeakTexturesDB.presets[presetName]
+    if preset then
+        preset.instanceDefaults = nil
     end
 end
 

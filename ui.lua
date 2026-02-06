@@ -7,7 +7,7 @@ local _, wt = ...
 -- Initialize UI constants
 function wt:InitializeUIConstants()
     local L = wt.L
-    wt.frameWidth = 696
+    wt.frameWidth = 705
     wt.frameHeight = 504
     wt.inset = 30
     wt.PANELOFFSET_Y = -20
@@ -87,6 +87,92 @@ function wt:CreateDropdown(parent, name, width, defaultText, defaultValue)
     return dropdown
 end
 
+function wt:CreateColorPicker(parent, labelText, r, g, b, a)
+    local container = CreateFrame("Frame", nil, parent)
+    container:SetSize(120, 20)
+    
+    -- Color swatch button
+    local swatch = CreateFrame("Button", nil, container)
+    swatch:SetSize(20, 20)
+    swatch:SetPoint("LEFT")
+    
+    -- Background (border)
+    local bg = swatch:CreateTexture(nil, "BACKGROUND")
+    bg:SetColorTexture(1, 1, 1, 1)
+    bg:SetAllPoints()
+    
+    -- Color display
+    local color = swatch:CreateTexture(nil, "ARTWORK")
+    color:SetColorTexture(r or 1, g or 1, b or 1, a or 1)
+    color:SetPoint("TOPLEFT", 2, -2)
+    color:SetPoint("BOTTOMRIGHT", -2, 2)
+    
+    -- Store current color
+    swatch.r = r or 1
+    swatch.g = g or 1
+    swatch.b = b or 1
+    swatch.a = a or 1
+    
+    -- Label
+    local label = container:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    label:SetPoint("LEFT", swatch, "RIGHT", 8, 0)
+    label:SetText(labelText or "Color")
+    
+    -- Click to open color picker
+    swatch:SetScript("OnClick", function(self)
+        local function OnColorChanged()
+            local newR, newG, newB = ColorPickerFrame:GetColorRGB()
+            local newA = ColorPickerFrame:GetColorAlpha()
+            color:SetColorTexture(newR, newG, newB, newA)
+            self.r = newR
+            self.g = newG
+            self.b = newB
+            self.a = newA
+        end
+        
+        local function OnCancel()
+            local oldR, oldG, oldB, oldA = ColorPickerFrame:GetPreviousValues()
+            color:SetColorTexture(oldR, oldG, oldB, oldA)
+            self.r = oldR
+            self.g = oldG
+            self.b = oldB
+            self.a = oldA
+        end
+        
+        local options = {
+            swatchFunc = OnColorChanged,
+            opacityFunc = OnColorChanged,
+            cancelFunc = OnCancel,
+            hasOpacity = true,
+            opacity = self.a,
+            r = self.r,
+            g = self.g,
+            b = self.b,
+        }
+        
+        ColorPickerFrame:SetupColorPickerAndShow(options)
+    end)
+    
+    -- Method to get current color
+    function container:GetColor()
+        return swatch.r, swatch.g, swatch.b, swatch.a
+    end
+    
+    -- Method to set color programmatically
+    function container:SetColor(r, g, b, a)
+        swatch.r = r or 1
+        swatch.g = g or 1
+        swatch.b = b or 1
+        swatch.a = a or 1
+        color:SetColorTexture(swatch.r, swatch.g, swatch.b, swatch.a)
+    end
+    
+    container.swatch = swatch
+    container.label = label
+    
+    return container
+end
+
 function wt:CreateUI()
     local L = wt.L
     self:InitializeUIConstants()
@@ -136,9 +222,10 @@ function wt:CreateUI()
     wt.frame.left.scrollBox:SetPoint("BOTTOMRIGHT", -19, 70)
 
     wt.frame.left.scrollBar = CreateFrame("EventFrame", nil, wt.frame.left, "MinimalScrollBar")
-    wt.frame.left.scrollBar:SetPoint("TOPLEFT", wt.frame.left.scrollBox, "TOPRIGHT", 0, 0)
+    wt.frame.left.scrollBar:SetPoint("TOPLEFT", wt.frame.left.scrollBox, "TOPRIGHT", 3, 0)
     wt.frame.left.scrollBar:SetPoint("BOTTOMLEFT", wt.frame.left.scrollBox, "BOTTOMRIGHT", 0, 0)
-    wt.frame.left.scrollBar:SetHideIfUnscrollable(false)
+    wt.frame.left.scrollBar:SetScale(0.65)
+    wt.frame.left.scrollBar:SetHideIfUnscrollable(true)
 
     wt.frame.left.dataProvider = CreateTreeDataProvider()
     wt.frame.left.scrollView = CreateScrollBoxListTreeListView()
@@ -179,6 +266,7 @@ function wt:CreateUI()
     wt.frame.left.filterScrollBar = CreateFrame("Slider", nil, wt.frame.left.filterPanel, "MinimalScrollBar")
     wt.frame.left.filterScrollBar:SetPoint("TOPLEFT", wt.frame.left.filterScrollFrame, "TOPRIGHT", 0, 0)
     wt.frame.left.filterScrollBar:SetPoint("BOTTOMLEFT", wt.frame.left.filterScrollFrame, "BOTTOMRIGHT", 0, 0)
+    wt.frame.left.filterScrollBar:SetScale(0.75)
 
     wt.frame.left.filterContent = CreateFrame("Frame", nil, wt.frame.left.filterScrollFrame)
     wt.frame.left.filterContent:SetSize(210, 1)
@@ -282,6 +370,10 @@ function wt:CreateUI()
     wt.frame.right.resetButton:SetPoint("BOTTOMLEFT", wt.frame.right, "BOTTOMLEFT", 5, 5)
     wt.frame.right.resetButton:SetScript("OnClick", function() wt:allDefault() end)
 
+    wt.frame.right.unlockFrameBtn = wt:CreateButton(wt.frame.right, 120, 30, wt.buttonNormal, wt.buttonHighlight, wt.buttonPushed, L.BUTTON_UNLOCK_POSITION)
+    wt.frame.right.unlockFrameBtn:SetPoint("BOTTOM", wt.frame.right, "BOTTOM", 0, 5)
+    wt.frame.right.unlockFrameBtn:SetScript("OnClick", function() wt:OnLockOrUnlockTextureToDrag() end)
+
     wt.frame.right.editPresetButton = wt:CreateButton(wt.frame.right, 120, 30, wt.buttonNormal, wt.buttonHighlight, wt.buttonPushed, L.BUTTON_SAVE_CHANGES)
     wt.frame.right.editPresetButton:SetPoint("BOTTOMRIGHT", wt.frame.right, "BOTTOMRIGHT", -5, 5)
     wt.frame.right.editPresetButton:SetScript("OnClick", function() wt:OnAddTextureClick() end)
@@ -303,37 +395,71 @@ function wt:CreateUI()
         end
     end
 
+    -- Config Panel with Scrolling
     wt.frame.right.configPanel = CreateFrame("Frame", nil, wt.frame.right, nil)
-    wt.frame.right.configPanel:SetSize(420, 440)
+    wt.frame.right.configPanel:SetSize(420, 380)
     wt.frame.right.configPanel:SetPoint("TOPLEFT", 10, wt.PANELOFFSET_Y)
 
+    -- Scroll Frame for config panel
+    wt.frame.right.configPanelScrollFrame = CreateFrame("ScrollFrame", nil, wt.frame.right.configPanel)
+    wt.frame.right.configPanelScrollFrame:SetPoint("TOPLEFT", 0, 0)
+    wt.frame.right.configPanelScrollFrame:SetPoint("BOTTOMRIGHT", -12, 0)
+    wt.frame.right.configPanelScrollFrame:EnableMouse(false)
+    wt.frame.right.configPanelScrollFrame:EnableMouseWheel(true)
+
+    -- Scroll Bar for config panel
+    wt.frame.right.configPanelScrollBar = CreateFrame("EventFrame", nil, wt.frame.right.configPanel, "MinimalScrollBar")
+    wt.frame.right.configPanelScrollBar:SetPoint("TOPLEFT", wt.frame.right.configPanelScrollFrame, "TOPRIGHT", 2, 0)
+    wt.frame.right.configPanelScrollBar:SetPoint("BOTTOMLEFT", wt.frame.right.configPanelScrollFrame, "BOTTOMRIGHT", 2, 0)
+    wt.frame.right.configPanelScrollBar:SetScale(0.65)
+    wt.frame.right.configPanelScrollBar:SetHideIfUnscrollable(true)
+
+    -- Scroll Content (child) - large height for all UI elements
+    wt.frame.right.configPanelContent = CreateFrame("Frame", nil, wt.frame.right.configPanelScrollFrame)
+    wt.frame.right.configPanelContent:SetSize(390, 650)
+    wt.frame.right.configPanelScrollFrame:SetScrollChild(wt.frame.right.configPanelContent)
+
+    ScrollUtil.InitScrollFrameWithScrollBar(wt.frame.right.configPanelScrollFrame, wt.frame.right.configPanelScrollBar)
+    
+    wt.frame.right.configPanelScrollFrame:SetScript("OnMouseWheel", function(self, delta)
+        local scrollBar = wt.frame.right.configPanelScrollBar
+        if scrollBar:IsVisible() then
+            local currentScroll = scrollBar:GetScrollPercentage() or 0
+            local step = wt.scrollSteps
+            scrollBar:SetScrollPercentage(currentScroll - (delta * step))
+        end
+    end)
+
+    -- Use configPanelContent for all child UI elements
+    local content = wt.frame.right.configPanelContent
+
     -- === BASIC INFORMATION ===
-    wt.frame.right.configPanel.basicHeader = wt:CreateHeader(wt.frame.right.configPanel, L.HEADER_BASIC_INFO)
-    wt.frame.right.configPanel.basicHeader:SetPoint("TOPLEFT", 5, -3)
+    content.basicHeader = wt:CreateHeader(content, L.HEADER_BASIC_INFO)
+    content.basicHeader:SetPoint("TOPLEFT", 5, 0)
 
     -- Basic Info
-    wt.frame.right.configPanel.presetNameEdit = wt:CreateEditBox(wt.frame.right.configPanel, 220, nil, L.PLACEHOLDER_PRESET_NAME)
-    wt.frame.right.configPanel.presetNameEdit:SetPoint("TOPLEFT", wt.frame.right.configPanel.basicHeader, "BOTTOMLEFT", 5, -24)
-    --wt.frame.right.configPanel.presetNameEdit.Instructions:SetPoint("TOPLEFT", 1, 0)
+    content.presetNameEdit = wt:CreateEditBox(content, 220, nil, L.PLACEHOLDER_PRESET_NAME)
+    content.presetNameEdit:SetPoint("TOPLEFT", content.basicHeader, "BOTTOMLEFT", 5, -24)
+    --content.presetNameEdit.Instructions:SetPoint("TOPLEFT", 1, 0)
 
-    wt.frame.right.configPanel.presetNameLabel = wt.frame.right.configPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    wt.frame.right.configPanel.presetNameLabel:SetPoint("BOTTOMLEFT", wt.frame.right.configPanel.presetNameEdit, "TOPLEFT", -5, 3)
-    wt.frame.right.configPanel.presetNameLabel:SetText(L.LABEL_PRESET_NAME)
+    content.presetNameLabel = content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    content.presetNameLabel:SetPoint("BOTTOMLEFT", content.presetNameEdit, "TOPLEFT", -5, 3)
+    content.presetNameLabel:SetText(L.LABEL_PRESET_NAME)
 
-    wt.frame.right.configPanel.groupDropDown = wt:CreateDropdown(wt.frame.right.configPanel, "WT_GroupDropdown", 160, L.DROPDOWN_NO_GROUP, "")
-    wt.frame.right.configPanel.groupDropDown:SetPoint("LEFT", wt.frame.right.configPanel.presetNameEdit, "RIGHT", 10, 0)
-    wt.frame.right.configPanel.groupDropDown:SetupMenu(function(dropdown, rootDescription)
+    content.groupDropDown = wt:CreateDropdown(content, "WT_GroupDropdown", 160, L.DROPDOWN_NO_GROUP, "")
+    content.groupDropDown:SetPoint("LEFT", content.presetNameEdit, "RIGHT", 10, 0)
+    content.groupDropDown:SetupMenu(function(dropdown, rootDescription)
         -- Ungrouped option
         rootDescription:CreateRadio(L.STATUS_UNGROUPED, function() return dropdown.selectedValue == "" end, function()
             dropdown.selectedValue = ""
-            wt.frame.right.configPanel.groupEditBox:Hide()
+            content.groupEditBox:Hide()
         end)
         
         -- option: Create new group
         rootDescription:CreateRadio(L.DROPDOWN_CREATE_NEW_GROUP, function() return dropdown.selectedValue == "__CREATE_NEW__" end, function()
             dropdown.selectedValue = "__CREATE_NEW__"
-            wt.frame.right.configPanel.groupEditBox:Show()
-            wt.frame.right.configPanel.groupEditBox:SetFocus()
+            content.groupEditBox:Show()
+            content.groupEditBox:SetFocus()
         end)
         
 
@@ -349,29 +475,29 @@ function wt:CreateUI()
         for _, groupPath in ipairs(groups) do
             rootDescription:CreateRadio(groupPath, function() return dropdown.selectedValue == groupPath end, function()
                 dropdown.selectedValue = groupPath
-                wt.frame.right.configPanel.groupEditBox:Hide()
+                content.groupEditBox:Hide()
             end)
         end
     end)
 
-    wt.frame.right.configPanel.groupEditLabel = wt.frame.right.configPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    wt.frame.right.configPanel.groupEditLabel:SetPoint("BOTTOMLEFT", wt.frame.right.configPanel.groupDropDown, "TOPLEFT", 0, 3)
-    wt.frame.right.configPanel.groupEditLabel:SetText(L.LABEL_GROUP)
+    content.groupEditLabel = content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    content.groupEditLabel:SetPoint("BOTTOMLEFT", content.groupDropDown, "TOPLEFT", 0, 3)
+    content.groupEditLabel:SetText(L.LABEL_GROUP)
 
     -- EditBox for creating new group (hidden by default)
-    wt.frame.right.configPanel.groupEditBox = wt:CreateEditBox(wt.frame.right.configPanel, 155, nil, L.PLACEHOLDER_GROUP_NAME)
-    wt.frame.right.configPanel.groupEditBox:SetPoint("TOP", wt.frame.right.configPanel.groupDropDown, "BOTTOM", 3, -5)
-    wt.frame.right.configPanel.groupEditBox:Hide()
+    content.groupEditBox = wt:CreateEditBox(content, 155, nil, L.PLACEHOLDER_GROUP_NAME)
+    content.groupEditBox:SetPoint("TOP", content.groupDropDown, "BOTTOM", 3, -5)
+    content.groupEditBox:Hide()
 
     -- === TEXTURE AND FRAME SETTINGS ===
-    wt.frame.right.configPanel.frameHeader = wt:CreateHeader(wt.frame.right.configPanel, L.HEADER_TEXTURE_FRAME)
-    wt.frame.right.configPanel.frameHeader:SetPoint("TOPLEFT", wt.frame.right.configPanel.presetNameEdit, "BOTTOMLEFT", -5, -12)
+    content.frameHeader = wt:CreateHeader(content, L.HEADER_TEXTURE_FRAME)
+    content.frameHeader:SetPoint("TOPLEFT", content.presetNameEdit, "BOTTOMLEFT", -5, -12)
 
     -- Texture Dropdown
-    wt.frame.right.configPanel.textureDropDown = wt:CreateDropdown(wt.frame.right.configPanel, "WT_TextureDropdown", 394.5, "Custom", "Custom")
-    wt.frame.right.configPanel.textureDropDown:SetPoint("TOPLEFT", wt.frame.right.configPanel.frameHeader, "BOTTOMLEFT", 0, -24)
-    wt.frame.right.configPanel.textureDropDown.selectedPath = nil
-    wt.frame.right.configPanel.textureDropDown:SetupMenu(function(dropdown, rootDescription)
+    content.textureDropDown = wt:CreateDropdown(content, "WT_TextureDropdown", 394.5, "Custom", "Custom")
+    content.textureDropDown:SetPoint("TOPLEFT", content.frameHeader, "BOTTOMLEFT", 0, -24)
+    content.textureDropDown.selectedPath = nil
+    content.textureDropDown:SetupMenu(function(dropdown, rootDescription)
         rootDescription:SetScrollMode(450)  -- Enable scrolling with max height
         
         -- Custom option
@@ -383,16 +509,16 @@ function wt:CreateUI()
             if wt.selectedPreset then
                 local preset = WeakTexturesDB.presets[wt.selectedPreset]
                 if preset and preset.texture then
-                    wt.frame.right.configPanel.textureCustomEdit:SetText(preset.texture)
+                    content.textureCustomEdit:SetText(preset.texture)
                 else
-                    wt.frame.right.configPanel.textureCustomEdit:SetText("")
+                    content.textureCustomEdit:SetText("")
                 end
             else
                 -- New preset - leave empty
-                wt.frame.right.configPanel.textureCustomEdit:SetText("")
+                content.textureCustomEdit:SetText("")
             end
             
-            wt.frame.right.configPanel.textureCustomEdit:Show()
+            content.textureCustomEdit:Show()
         end)
         
         -- Show registered custom textures
@@ -414,7 +540,7 @@ function wt:CreateUI()
                 local radio = rootDescription:CreateRadio(displayName, function() return dropdown.selectedValue == displayName end, function()
                     dropdown.selectedValue = displayName
                     dropdown.selectedPath = texturePath
-                    wt.frame.right.configPanel.textureCustomEdit:Hide()
+                    content.textureCustomEdit:Hide()
                 end)
                 radio:SetTooltip(function(tooltip)
                     tooltip:SetText(displayName)
@@ -466,7 +592,7 @@ function wt:CreateUI()
                     local radio = rootDescription:CreateRadio(textureName, function() return dropdown.selectedValue == textureName end, function()
                         dropdown.selectedValue = textureName
                         dropdown.selectedPath = texturePath
-                        wt.frame.right.configPanel.textureCustomEdit:Hide()
+                        content.textureCustomEdit:Hide()
                     end)
                 radio:SetTooltip(function(tooltip)
                     tooltip:SetText(textureName)
@@ -519,7 +645,7 @@ function wt:CreateUI()
                     local radio = rootDescription:CreateRadio(textureName, function() return dropdown.selectedValue == textureName end, function()
                         dropdown.selectedValue = textureName
                         dropdown.selectedPath = texturePath
-                        wt.frame.right.configPanel.textureCustomEdit:Hide()
+                        content.textureCustomEdit:Hide()
                     end)
                 radio:SetTooltip(function(tooltip)
                     tooltip:SetText(textureName)
@@ -571,7 +697,7 @@ function wt:CreateUI()
                     local radio = rootDescription:CreateRadio(textureName, function() return dropdown.selectedValue == textureName end, function()
                         dropdown.selectedValue = textureName
                         dropdown.selectedPath = texturePath
-                        wt.frame.right.configPanel.textureCustomEdit:Hide()
+                        content.textureCustomEdit:Hide()
                     end)
                 radio:SetTooltip(function(tooltip)
                     tooltip:SetText(textureName)
@@ -611,18 +737,18 @@ function wt:CreateUI()
         end
     end)
 
-    wt.frame.right.configPanel.textureLabel = wt.frame.right.configPanel:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
-    wt.frame.right.configPanel.textureLabel:SetPoint("BOTTOMLEFT", wt.frame.right.configPanel.textureDropDown, "TOPLEFT", 0, 3)
-    wt.frame.right.configPanel.textureLabel:SetText(L.LABEL_TEXTURE_PATH)
+    content.textureLabel = content:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
+    content.textureLabel:SetPoint("BOTTOMLEFT", content.textureDropDown, "TOPLEFT", 0, 3)
+    content.textureLabel:SetText(L.LABEL_TEXTURE_PATH)
 
     -- Custom texture path EditBox (shown when "Custom" is selected)
-    wt.frame.right.configPanel.textureCustomEdit = wt:CreateEditBox(wt.frame.right.configPanel, 390, nil, L.PLACEHOLDER_TEXTURE_PATH .. "e.g. Interface\\AddOns\\MyAddon\\Textures\\MyTexture.tga")
-    wt.frame.right.configPanel.textureCustomEdit:SetPoint("TOPLEFT", wt.frame.right.configPanel.textureDropDown, "BOTTOMLEFT", 5, -5)
+    content.textureCustomEdit = wt:CreateEditBox(content, 390, nil, L.PLACEHOLDER_TEXTURE_PATH .. "e.g. Interface\\AddOns\\MyAddon\\Textures\\MyTexture.tga")
+    content.textureCustomEdit:SetPoint("TOPLEFT", content.textureDropDown, "BOTTOMLEFT", 5, -5)
 
     -- Frame Type & Strata
-    wt.frame.right.configPanel.ftypeDropDown = wt:CreateDropdown(wt.frame.right.configPanel, "WT_TypeDropdown", 155, L.TYPE_STATIC, "Static")
-    wt.frame.right.configPanel.ftypeDropDown:SetPoint("TOPLEFT", wt.frame.right.configPanel.textureCustomEdit, "BOTTOMLEFT", -5, -24)
-    wt.frame.right.configPanel.ftypeDropDown:SetupMenu(function(dropdown, rootDescription)
+    content.ftypeDropDown = wt:CreateDropdown(content, "WT_TypeDropdown", 155, L.TYPE_STATIC, "Static")
+    content.ftypeDropDown:SetPoint("TOPLEFT", content.textureCustomEdit, "BOTTOMLEFT", -5, -24)
+    content.ftypeDropDown:SetupMenu(function(dropdown, rootDescription)
         rootDescription:CreateRadio(L.TYPE_STATIC, function() return dropdown.selectedValue == "Static" end, function()
             dropdown.selectedValue = "Static"
             wt:SetShownMotionFields(false)
@@ -633,13 +759,13 @@ function wt:CreateUI()
         end)
     end)
 
-    wt.frame.right.configPanel.frametypeLabel = wt.frame.right.configPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    wt.frame.right.configPanel.frametypeLabel:SetPoint("BOTTOMLEFT", wt.frame.right.configPanel.ftypeDropDown, "TOPLEFT", 0, 3)
-    wt.frame.right.configPanel.frametypeLabel:SetText(L.LABEL_TYPE)
+    content.frametypeLabel = content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    content.frametypeLabel:SetPoint("BOTTOMLEFT", content.ftypeDropDown, "TOPLEFT", 0, 3)
+    content.frametypeLabel:SetText(L.LABEL_TYPE)
 
-    wt.frame.right.configPanel.strataDropDown = wt:CreateDropdown(wt.frame.right.configPanel, "MTP_StrataDropdown", 169, "MEDIUM", "MEDIUM")
-    wt.frame.right.configPanel.strataDropDown:SetPoint("LEFT", wt.frame.right.configPanel.ftypeDropDown, "RIGHT", 8, 0)
-    wt.frame.right.configPanel.strataDropDown:SetupMenu(function(dropdown, rootDescription)
+    content.strataDropDown = wt:CreateDropdown(content, "MTP_StrataDropdown", 169, "MEDIUM", "MEDIUM")
+    content.strataDropDown:SetPoint("LEFT", content.ftypeDropDown, "RIGHT", 8, 0)
+    content.strataDropDown:SetupMenu(function(dropdown, rootDescription)
         for _, strata in ipairs(wt.frameStrataList) do
             rootDescription:CreateRadio(strata, function() return dropdown.selectedValue == strata end, function()
                 dropdown.selectedValue = strata
@@ -651,154 +777,367 @@ function wt:CreateUI()
         end
     end)
 
-    wt.frame.right.configPanel.strataLabel = wt.frame.right.configPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    wt.frame.right.configPanel.strataLabel:SetPoint("BOTTOMLEFT", wt.frame.right.configPanel.strataDropDown, "TOPLEFT", 0, 3)
-    wt.frame.right.configPanel.strataLabel:SetText(L.LABEL_STRATA)
+    content.strataLabel = content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    content.strataLabel:SetPoint("BOTTOMLEFT", content.strataDropDown, "TOPLEFT", 0, 3)
+    content.strataLabel:SetText(L.LABEL_STRATA)
 
-    wt.frame.right.configPanel.frameLevelEdit = wt:CreateEditBox(wt.frame.right.configPanel, 55, nil, 100)
-    wt.frame.right.configPanel.frameLevelEdit:SetPoint("LEFT", wt.frame.right.configPanel.strataDropDown, "RIGHT", 8, 0)
-    wt.frame.right.configPanel.frameLevelEdit:SetNumeric(true)
+    content.frameLevelEdit = wt:CreateEditBox(content, 55, nil, 100)
+    content.frameLevelEdit:SetPoint("LEFT", content.strataDropDown, "RIGHT", 8, 1)
+    content.frameLevelEdit:SetNumeric(true)
 
-    wt.frame.right.configPanel.frameLevelLabel = wt.frame.right.configPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    wt.frame.right.configPanel.frameLevelLabel:SetPoint("BOTTOMLEFT", wt.frame.right.configPanel.frameLevelEdit, "TOPLEFT", 0, 3)
-    wt.frame.right.configPanel.frameLevelLabel:SetText(L.LABEL_LEVEL)
+    content.frameLevelLabel = content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    content.frameLevelLabel:SetPoint("BOTTOMLEFT", content.frameLevelEdit, "TOPLEFT", -4, 3)
+    content.frameLevelLabel:SetText(L.LABEL_LEVEL)
 
     -- Anchor Type Dropdown
-    wt.frame.right.configPanel.anchorTypeDropDown = wt:CreateDropdown(wt.frame.right.configPanel, "WT_AnchorTypeDropdown", 100, L.ANCHOR_SCREEN, "Screen")
-    wt.frame.right.configPanel.anchorTypeDropDown:SetPoint("TOPLEFT", wt.frame.right.configPanel.ftypeDropDown, "BOTTOMLEFT", 0, -24)
-    wt.frame.right.configPanel.anchorTypeDropDown:SetupMenu(function(dropdown, rootDescription)
+    content.anchorTypeDropDown = wt:CreateDropdown(content, "WT_AnchorTypeDropdown", 100, L.ANCHOR_SCREEN, "Screen")
+    content.anchorTypeDropDown:SetPoint("TOPLEFT", content.ftypeDropDown, "BOTTOMLEFT", 0, -24)
+    content.anchorTypeDropDown:SetupMenu(function(dropdown, rootDescription)
         rootDescription:CreateRadio(L.ANCHOR_SCREEN, function() return dropdown.selectedValue == "Screen" end, function()
             dropdown.selectedValue = "Screen"
-            wt.frame.right.configPanel.anchorEdit:SetText("UIParent")
-            wt.frame.right.configPanel.anchorEdit:Hide()
-            wt.frame.right.configPanel.selectFrameBtn:Hide()
+            content.anchorEdit:SetText("UIParent")
+            content.anchorEdit:Hide()
+            content.selectFrameBtn:Hide()
         end)
         
         rootDescription:CreateRadio(L.ANCHOR_CUSTOM_FRAME, function() return dropdown.selectedValue == "Custom" end, function()
             dropdown.selectedValue = "Custom"
             -- Clear UIParent if it's there, otherwise keep current value
-            local currentValue = wt.frame.right.configPanel.anchorEdit:GetText()
+            local currentValue = content.anchorEdit:GetText()
             if currentValue == "UIParent" then
-                wt.frame.right.configPanel.anchorEdit:SetText("")
+                content.anchorEdit:SetText("")
             end
-            wt.frame.right.configPanel.anchorEdit:Show()
-            wt.frame.right.configPanel.selectFrameBtn:Show()
+            content.anchorEdit:Show()
+            content.selectFrameBtn:Show()
         end)
     end)
 
-    wt.frame.right.configPanel.anchorTypeLabel = wt.frame.right.configPanel:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
-    wt.frame.right.configPanel.anchorTypeLabel:SetPoint("BOTTOMLEFT", wt.frame.right.configPanel.anchorTypeDropDown, "TOPLEFT", 0, 3)
-    wt.frame.right.configPanel.anchorTypeLabel:SetText(L.LABEL_ANCHOR_FRAME)
+    content.anchorTypeLabel = content:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
+    content.anchorTypeLabel:SetPoint("BOTTOMLEFT", content.anchorTypeDropDown, "TOPLEFT", 0, 3)
+    content.anchorTypeLabel:SetText(L.LABEL_ANCHOR_FRAME)
 
     -- Anchor Edit (hidden by default when Screen is selected)
-    wt.frame.right.configPanel.anchorEdit = wt:CreateEditBox(wt.frame.right.configPanel, 151, nil, "e.g. Minimap")
-    wt.frame.right.configPanel.anchorEdit:SetPoint("LEFT", wt.frame.right.configPanel.anchorTypeDropDown, "RIGHT", 10, 0)
-    wt.frame.right.configPanel.anchorEdit:Hide()  -- Hidden by default
+    content.anchorEdit = wt:CreateEditBox(content, 151, nil, "e.g. Minimap")
+    content.anchorEdit:SetPoint("LEFT", content.anchorTypeDropDown, "RIGHT", 10, 0)
+    content.anchorEdit:Hide()  -- Hidden by default
 
-    wt.frame.right.configPanel.selectFrameBtn = wt:CreateButton(wt.frame.right.configPanel, 55, 22, wt.buttonNormal, wt.buttonHighlight, wt.buttonPushed, L.BUTTON_SELECT)
-    wt.frame.right.configPanel.selectFrameBtn:SetPoint("LEFT", wt.frame.right.configPanel.anchorEdit, "RIGHT", 5, 0)
-    wt.frame.right.configPanel.selectFrameBtn:SetScript("OnClick", function() wt:StartFrameChooser() end)
-    wt.frame.right.configPanel.selectFrameBtn:Hide()  -- Hidden by default
+    content.selectFrameBtn = wt:CreateButton(content, 55, 22, wt.buttonNormal, wt.buttonHighlight, wt.buttonPushed, L.BUTTON_SELECT)
+    content.selectFrameBtn:SetPoint("LEFT", content.anchorEdit, "RIGHT", 5, 0)
+    content.selectFrameBtn:SetScript("OnClick", function() wt:StartFrameChooser() end)
+    content.selectFrameBtn:Hide()  -- Hidden by default
+
+    -- === TEXT SETTINGS ===
+    content.textHeader = wt:CreateHeader(content, L.HEADER_TEXT_SETTINGS)
+    content.textHeader:SetPoint("TOPLEFT", content.anchorTypeDropDown, "BOTTOMLEFT", 1, -12)
+
+    -- Text content
+    content.textContentEdit = wt:CreateEditBox(content, 390, nil, L.PLACEHOLDER_TEXT_CONTENT)
+    content.textContentEdit:SetPoint("TOPLEFT", content.textHeader, "BOTTOMLEFT", 5, -24)
+
+    content.textContentLabel = content:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
+    content.textContentLabel:SetPoint("BOTTOMLEFT", content.textContentEdit, "TOPLEFT", -5, 3)
+    content.textContentLabel:SetText(L.LABEL_TEXT_CONTENT)
+
+    -- Font dropdown (LSM fonts)
+    content.fontDropDown = wt:CreateDropdown(content, "WT_FontDropdown", 190, "Friz Quadrata TT", "Friz Quadrata TT")
+    content.fontDropDown:SetPoint("TOPLEFT", content.textContentEdit, "BOTTOMLEFT", -5, -24)
+    content.fontDropDown:SetupMenu(function(dropdown, rootDescription)
+        local fonts = wt.LSM:List("font")
+        table.sort(fonts)
+        for _, fontName in ipairs(fonts) do
+            rootDescription:CreateRadio(fontName, function() return dropdown.selectedValue == fontName end, function()
+                dropdown.selectedValue = fontName
+            end)
+        end
+    end)
+
+    content.fontLabel = content:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
+    content.fontLabel:SetPoint("BOTTOMLEFT", content.fontDropDown, "TOPLEFT", 0, 3)
+    content.fontLabel:SetText(L.LABEL_FONT)
+
+    -- Font size
+    content.fontSizeEdit = wt:CreateEditBox(content, wt.smallEditBoxWidth, nil, 48)
+    content.fontSizeEdit:SetPoint("LEFT", content.fontDropDown, "RIGHT", 8, 0)
+    content.fontSizeEdit:SetNumeric(true)
+
+    content.fontSizeLabel = content:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
+    content.fontSizeLabel:SetPoint("BOTTOM", content.fontSizeEdit, "TOP", 0, 3)
+    content.fontSizeLabel:SetText(L.LABEL_FONT_SIZE)
+
+    -- Font outline
+    content.fontOutlineDropDown = wt:CreateDropdown(content, "WT_FontOutlineDropdown", 130, L.OUTLINE_NORMAL, "OUTLINE")
+    content.fontOutlineDropDown:SetPoint("LEFT", content.fontSizeEdit, "RIGHT", 8, 0)
+    content.fontOutlineDropDown:SetupMenu(function(dropdown, rootDescription)
+        rootDescription:CreateRadio(L.OUTLINE_NONE, function() return dropdown.selectedValue == "" end, function()
+            dropdown.selectedValue = ""
+        end)
+        rootDescription:CreateRadio(L.OUTLINE_NORMAL, function() return dropdown.selectedValue == "OUTLINE" end, function()
+            dropdown.selectedValue = "OUTLINE"
+        end)
+        rootDescription:CreateRadio(L.OUTLINE_THICK, function() return dropdown.selectedValue == "THICKOUTLINE" end, function()
+            dropdown.selectedValue = "THICKOUTLINE"
+        end)
+        rootDescription:CreateRadio(L.OUTLINE_MONOCHROME, function() return dropdown.selectedValue == "MONOCHROME" end, function()
+            dropdown.selectedValue = "MONOCHROME"
+        end)
+    end)
+
+    content.fontOutlineLabel = content:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
+    content.fontOutlineLabel:SetPoint("BOTTOM", content.fontOutlineDropDown, "TOP", 0, 3)
+    content.fontOutlineLabel:SetText(L.LABEL_FONT_OUTLINE)
+
+    -- Text color picker
+    content.textColorPicker = wt:CreateColorPicker(content, L.LABEL_TEXT_COLOR, 1, 0.82, 0, 1)
+    content.textColorPicker:SetPoint("TOPLEFT", content.fontDropDown, "BOTTOMLEFT", 0, -24)
+
+    -- Text offset X/Y
+    content.textOffsetXEdit = wt:CreateEditBox(content, wt.smallEditBoxWidth, nil, 0)
+    content.textOffsetXEdit:SetPoint("LEFT", content.textColorPicker, "RIGHT", 12, 0)
+
+    content.textOffsetXLabel = content:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
+    content.textOffsetXLabel:SetPoint("BOTTOM", content.textOffsetXEdit, "TOP", 0, 3)
+    content.textOffsetXLabel:SetText(L.LABEL_TEXT_OFFSET_X)
+
+    content.textOffsetYEdit = wt:CreateEditBox(content, wt.smallEditBoxWidth, nil, 125)
+    content.textOffsetYEdit:SetPoint("LEFT", content.textOffsetXEdit, "RIGHT", 8, 0)
+
+    content.textOffsetYLabel = content:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
+    content.textOffsetYLabel:SetPoint("BOTTOM", content.textOffsetYEdit, "TOP", 0, 3)
+    content.textOffsetYLabel:SetText(L.LABEL_TEXT_OFFSET_Y)
 
     -- === SIZE & OFFSET ===
-    wt.frame.right.configPanel.sizeHeader = wt:CreateHeader(wt.frame.right.configPanel, L.HEADER_VISUAL)
-    wt.frame.right.configPanel.sizeHeader:SetPoint("TOPLEFT", wt.frame.right.configPanel.anchorTypeDropDown, "BOTTOMLEFT", 1, -12)
+    content.sizeHeader = wt:CreateHeader(content, L.HEADER_VISUAL)
+    content.sizeHeader:SetPoint("TOPLEFT", content.textColorPicker, "BOTTOMLEFT", -3, -12)
 
-    wt.frame.right.configPanel.widthEdit = wt:CreateEditBox(wt.frame.right.configPanel, wt.smallEditBoxWidth, nil, 100)
-    wt.frame.right.configPanel.widthEdit:SetPoint("TOPLEFT", wt.frame.right.configPanel.sizeHeader, "BOTTOMLEFT", 3, -24)
+    -- Texture color picker
+    content.textureColorPicker = wt:CreateColorPicker(content, L.LABEL_TEXTURE_COLOR, 1, 1, 1, 1)
+    content.textureColorPicker:SetPoint("TOPLEFT", content.sizeHeader, "BOTTOMLEFT", 3, -24)
 
-    wt.frame.right.configPanel.widthLabel = wt.frame.right.configPanel:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
-    wt.frame.right.configPanel.widthLabel:SetPoint("BOTTOM", wt.frame.right.configPanel.widthEdit, "TOP", 0, 3)
-    wt.frame.right.configPanel.widthLabel:SetText(L.LABEL_WIDTH)
+    content.widthEdit = wt:CreateEditBox(content, wt.smallEditBoxWidth, nil, 100)
+    content.widthEdit:SetPoint("LEFT", content.textureColorPicker, "RIGHT", 12, -36)
 
-    wt.frame.right.configPanel.heightEdit = wt:CreateEditBox(wt.frame.right.configPanel, wt.smallEditBoxWidth, nil, 100)
-    wt.frame.right.configPanel.heightEdit:SetPoint("LEFT", wt.frame.right.configPanel.widthEdit, "RIGHT", 8, 0)
+    content.widthLabel = content:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
+    content.widthLabel:SetPoint("BOTTOM", content.widthEdit, "TOP", 0, 3)
+    content.widthLabel:SetText(L.LABEL_WIDTH)
 
-    wt.frame.right.configPanel.heightLabel = wt.frame.right.configPanel:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
-    wt.frame.right.configPanel.heightLabel:SetPoint("BOTTOM", wt.frame.right.configPanel.heightEdit, "TOP", 0, 3)
-    wt.frame.right.configPanel.heightLabel:SetText(L.LABEL_HEIGHT)
+    content.heightEdit = wt:CreateEditBox(content, wt.smallEditBoxWidth, nil, 100)
+    content.heightEdit:SetPoint("LEFT", content.widthEdit, "RIGHT", 8, 0)
 
-    wt.frame.right.configPanel.xOffsetEdit = wt:CreateEditBox(wt.frame.right.configPanel, wt.smallEditBoxWidth, nil, 0)
-    wt.frame.right.configPanel.xOffsetEdit:SetPoint("LEFT", wt.frame.right.configPanel.heightEdit, "RIGHT", 8, 0)
+    content.heightLabel = content:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
+    content.heightLabel:SetPoint("BOTTOM", content.heightEdit, "TOP", 0, 3)
+    content.heightLabel:SetText(L.LABEL_HEIGHT)
 
-    wt.frame.right.configPanel.xOffsetLabel = wt.frame.right.configPanel:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
-    wt.frame.right.configPanel.xOffsetLabel:SetPoint("BOTTOM", wt.frame.right.configPanel.xOffsetEdit, "TOP", 0, 3)
-    wt.frame.right.configPanel.xOffsetLabel:SetText(L.LABEL_X)
+    content.xOffsetEdit = wt:CreateEditBox(content, wt.smallEditBoxWidth, nil, 0)
+    content.xOffsetEdit:SetPoint("LEFT", content.textureColorPicker, "RIGHT", 12, 0)
 
-    wt.frame.right.configPanel.yOffsetEdit = wt:CreateEditBox(wt.frame.right.configPanel, wt.smallEditBoxWidth, nil, 0)
-    wt.frame.right.configPanel.yOffsetEdit:SetPoint("LEFT", wt.frame.right.configPanel.xOffsetEdit, "RIGHT", 8, 0)
+    content.xOffsetLabel = content:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
+    content.xOffsetLabel:SetPoint("BOTTOM", content.xOffsetEdit, "TOP", 0, 3)
+    content.xOffsetLabel:SetText(L.LABEL_X)
 
-    wt.frame.right.configPanel.yOffsetLabel = wt.frame.right.configPanel:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
-    wt.frame.right.configPanel.yOffsetLabel:SetPoint("BOTTOM", wt.frame.right.configPanel.yOffsetEdit, "TOP", 0, 3)
-    wt.frame.right.configPanel.yOffsetLabel:SetText(L.LABEL_Y)
+    content.yOffsetEdit = wt:CreateEditBox(content, wt.smallEditBoxWidth, nil, 0)
+    content.yOffsetEdit:SetPoint("LEFT", content.xOffsetEdit, "RIGHT", 8, 0)
 
-    wt.frame.right.configPanel.scaleEdit = wt:CreateEditBox(wt.frame.right.configPanel, wt.smallEditBoxWidth, nil, "1.0")
-    wt.frame.right.configPanel.scaleEdit:SetPoint("RIGHT", wt.frame.right.configPanel.yOffsetEdit, "RIGHT", 67, 0)
-    wt.frame.right.configPanel.scaleEdit:SetText("1.0")
+    content.yOffsetLabel = content:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
+    content.yOffsetLabel:SetPoint("BOTTOM", content.yOffsetEdit, "TOP", 0, 3)
+    content.yOffsetLabel:SetText(L.LABEL_Y)
 
-    wt.frame.right.configPanel.scaleLabel = wt.frame.right.configPanel:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
-    wt.frame.right.configPanel.scaleLabel:SetPoint("BOTTOM", wt.frame.right.configPanel.scaleEdit, "TOP", 0, 3)
-    wt.frame.right.configPanel.scaleLabel:SetText(L.LABEL_SCALE)
+    content.scaleEdit = wt:CreateEditBox(content, wt.smallEditBoxWidth, nil, "1.0")
+    content.scaleEdit:SetPoint("LEFT", content.yOffsetEdit, "RIGHT", 12, 0)
+    content.scaleEdit:SetText("1.0")
 
-    wt.frame.right.configPanel.angleEdit = wt:CreateEditBox(wt.frame.right.configPanel, wt.smallEditBoxWidth, nil, 0)
-    wt.frame.right.configPanel.angleEdit:SetPoint("TOPLEFT", wt.frame.right.configPanel.scaleEdit, "BOTTOMLEFT", 0, -16)
-    wt.frame.right.configPanel.angleEdit:SetText("0")
+    content.scaleLabel = content:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
+    content.scaleLabel:SetPoint("BOTTOM", content.scaleEdit, "TOP", 0, 3)
+    content.scaleLabel:SetText(L.LABEL_SCALE)
 
-    wt.frame.right.configPanel.angleLabel = wt.frame.right.configPanel:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
-    wt.frame.right.configPanel.angleLabel:SetPoint("BOTTOM", wt.frame.right.configPanel.angleEdit, "TOP", 0, 3)
-    wt.frame.right.configPanel.angleLabel:SetText(L.LABEL_ANGLE)
+    content.angleEdit = wt:CreateEditBox(content, wt.smallEditBoxWidth, nil, 0)
+    content.angleEdit:SetPoint("TOPLEFT", content.scaleEdit, "BOTTOMLEFT", 0, -16)
+    content.angleEdit:SetText("0")
 
-    wt.frame.right.configPanel.alphaEdit = wt:CreateEditBox(wt.frame.right.configPanel, wt.smallEditBoxWidth, nil, "1.0")
-    wt.frame.right.configPanel.alphaEdit:SetPoint("LEFT", wt.frame.right.configPanel.angleEdit, "RIGHT", 8, 0)
-    wt.frame.right.configPanel.alphaEdit:SetText("1.0")
+    content.angleLabel = content:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
+    content.angleLabel:SetPoint("BOTTOM", content.angleEdit, "TOP", 0, 3)
+    content.angleLabel:SetText(L.LABEL_ANGLE)
 
-    wt.frame.right.configPanel.alphaLabel = wt.frame.right.configPanel:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
-    wt.frame.right.configPanel.alphaLabel:SetPoint("BOTTOM", wt.frame.right.configPanel.alphaEdit, "TOP", 0, 3)
-    wt.frame.right.configPanel.alphaLabel:SetText(L.LABEL_ALPHA)
+    content.alphaEdit = wt:CreateEditBox(content, wt.smallEditBoxWidth, nil, "1.0")
+    content.alphaEdit:SetPoint("LEFT", content.angleEdit, "RIGHT", 8, 0)
+    content.alphaEdit:SetText("1.0")
 
-    wt.frame.right.configPanel.unlockFrameBtn = wt:CreateButton(wt.frame.right.configPanel, 120, 30, wt.buttonNormal, wt.buttonHighlight, wt.buttonPushed, L.BUTTON_UNLOCK_POSITION)
-    wt.frame.right.configPanel.unlockFrameBtn:SetPoint("BOTTOM", wt.frame.right.configPanel, "BOTTOM", -8, 20)
-    wt.frame.right.configPanel.unlockFrameBtn:SetScript("OnClick", function() wt:OnLockOrUnlockTextureToDrag() end)
+    content.alphaLabel = content:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
+    content.alphaLabel:SetPoint("BOTTOM", content.alphaEdit, "TOP", 0, 3)
+    content.alphaLabel:SetText(L.LABEL_ALPHA)
 
-    wt.frame.right.configPanel.columnsEdit = wt:CreateEditBox(wt.frame.right.configPanel, wt.smallEditBoxWidth, nil, 4)
-    wt.frame.right.configPanel.columnsEdit:SetPoint("TOPLEFT", wt.frame.right.configPanel.widthEdit, "BOTTOMLEFT", 0, -16)
-    wt.frame.right.configPanel.columnsEdit:SetNumeric(true)
-    wt.frame.right.configPanel.columnsEdit:Hide()
+    content.columnsEdit = wt:CreateEditBox(content, wt.smallEditBoxWidth, nil, 4)
+    content.columnsEdit:SetPoint("TOPLEFT", content.widthEdit, "BOTTOMLEFT", 0, -16)
+    content.columnsEdit:SetNumeric(true)
+    content.columnsEdit:Hide()
 
-    wt.frame.right.configPanel.columnsLabel = wt.frame.right.configPanel:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
-    wt.frame.right.configPanel.columnsLabel:SetPoint("BOTTOM", wt.frame.right.configPanel.columnsEdit, "TOP", 0, 3)
-    wt.frame.right.configPanel.columnsLabel:SetText(L.LABEL_COL)
-    wt.frame.right.configPanel.columnsLabel:Hide()
+    content.columnsLabel = content:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
+    content.columnsLabel:SetPoint("BOTTOM", content.columnsEdit, "TOP", 0, 3)
+    content.columnsLabel:SetText(L.LABEL_COL)
+    content.columnsLabel:Hide()
 
-    wt.frame.right.configPanel.rowsEdit = wt:CreateEditBox(wt.frame.right.configPanel, wt.smallEditBoxWidth, nil, 4)
-    wt.frame.right.configPanel.rowsEdit:SetPoint("LEFT", wt.frame.right.configPanel.columnsEdit, "RIGHT", 8, 0)
-    wt.frame.right.configPanel.rowsEdit:SetNumeric(true)
-    wt.frame.right.configPanel.rowsEdit:Hide()
+    content.rowsEdit = wt:CreateEditBox(content, wt.smallEditBoxWidth, nil, 4)
+    content.rowsEdit:SetPoint("LEFT", content.columnsEdit, "RIGHT", 8, 0)
+    content.rowsEdit:SetNumeric(true)
+    content.rowsEdit:Hide()
 
-    wt.frame.right.configPanel.rowsLabel = wt.frame.right.configPanel:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
-    wt.frame.right.configPanel.rowsLabel:SetPoint("BOTTOM", wt.frame.right.configPanel.rowsEdit, "TOP", 0, 3)
-    wt.frame.right.configPanel.rowsLabel:SetText(L.LABEL_ROW)
-    wt.frame.right.configPanel.rowsLabel:Hide()
+    content.rowsLabel = content:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
+    content.rowsLabel:SetPoint("BOTTOM", content.rowsEdit, "TOP", 0, 3)
+    content.rowsLabel:SetText(L.LABEL_ROW)
+    content.rowsLabel:Hide()
 
-    wt.frame.right.configPanel.totalFramesEdit = wt:CreateEditBox(wt.frame.right.configPanel, wt.smallEditBoxWidth, nil, 16)
-    wt.frame.right.configPanel.totalFramesEdit:SetPoint("LEFT", wt.frame.right.configPanel.rowsEdit, "RIGHT", 8, 0)
-    wt.frame.right.configPanel.totalFramesEdit:SetNumeric(true)
-    wt.frame.right.configPanel.totalFramesEdit:Hide()
+    content.totalFramesEdit = wt:CreateEditBox(content, wt.smallEditBoxWidth, nil, 16)
+    content.totalFramesEdit:SetPoint("LEFT", content.rowsEdit, "RIGHT", 12, 0)
+    content.totalFramesEdit:SetNumeric(true)
+    content.totalFramesEdit:Hide()
 
-    wt.frame.right.configPanel.totalFramesLabel = wt.frame.right.configPanel:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
-    wt.frame.right.configPanel.totalFramesLabel:SetPoint("BOTTOM", wt.frame.right.configPanel.totalFramesEdit, "TOP", 0, 3)
-    wt.frame.right.configPanel.totalFramesLabel:SetText(L.LABEL_FRAMES)
-    wt.frame.right.configPanel.totalFramesLabel:Hide()
+    content.totalFramesLabel = content:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
+    content.totalFramesLabel:SetPoint("BOTTOM", content.totalFramesEdit, "TOP", 0, 3)
+    content.totalFramesLabel:SetText(L.LABEL_FRAMES)
+    content.totalFramesLabel:Hide()
 
-    wt.frame.right.configPanel.fpsEdit = wt:CreateEditBox(wt.frame.right.configPanel, wt.smallEditBoxWidth, nil, 10)
-    wt.frame.right.configPanel.fpsEdit:SetPoint("LEFT", wt.frame.right.configPanel.totalFramesEdit, "RIGHT", 8, 0)
-    wt.frame.right.configPanel.fpsEdit:SetNumeric(true)
-    wt.frame.right.configPanel.fpsEdit:Hide()
+    content.fpsEdit = wt:CreateEditBox(content, wt.smallEditBoxWidth, nil, 10)
+    content.fpsEdit:SetPoint("LEFT", content.totalFramesEdit, "RIGHT", 8, 0)
+    content.fpsEdit:SetNumeric(true)
+    content.fpsEdit:Hide()
 
-    wt.frame.right.configPanel.fpsLabel = wt.frame.right.configPanel:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
-    wt.frame.right.configPanel.fpsLabel:SetPoint("BOTTOM", wt.frame.right.configPanel.fpsEdit, "TOP", 0, 3)
-    wt.frame.right.configPanel.fpsLabel:SetText(L.LABEL_FPS)
-    wt.frame.right.configPanel.fpsLabel:Hide()
+    content.fpsLabel = content:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
+    content.fpsLabel:SetPoint("BOTTOM", content.fpsEdit, "TOP", 0, 3)
+    content.fpsLabel:SetText(L.LABEL_FPS)
+    content.fpsLabel:Hide()
+
+    -- === SOUND SETTINGS ===
+    content.soundHeader = wt:CreateHeader(content, L.HEADER_SOUND_SETTINGS)
+    content.soundHeader:SetPoint("TOPLEFT", content.sizeHeader, "BOTTOMLEFT", 0, -100)
+
+    -- Sound Dropdown
+    content.soundDropDown = wt:CreateDropdown(content, "WT_SoundDropdown", 250, L.SOUND_NONE, "None")
+    content.soundDropDown:SetPoint("TOPLEFT", content.soundHeader, "BOTTOMLEFT", 5, -24)
+    content.soundDropDown.selectedPath = nil
+    content.soundDropDown:SetupMenu(function(dropdown, rootDescription)
+        rootDescription:SetScrollMode(450)
+        
+        -- Helper function to add preview button to menu item
+        local function AddPreviewButton(radio, soundPath, soundName)
+            radio:AddInitializer(function(button, description, menu)
+                local previewBtn = button:AttachTexture()
+                previewBtn:SetSize(16, 16)
+                previewBtn:SetPoint("RIGHT", -4, 0)
+                previewBtn:SetAtlas("voicechat-icon-speaker")
+                
+                -- Create clickable region
+                if not button.soundPreviewRegion then
+                    button.soundPreviewRegion = CreateFrame("Button", nil, button)
+                    button.soundPreviewRegion:SetSize(20, 20)
+                    button.soundPreviewRegion:SetPoint("RIGHT", -2, 0)
+                    
+                    -- Highlight on hover
+                    local highlight = button.soundPreviewRegion:CreateTexture(nil, "HIGHLIGHT")
+                    highlight:SetAllPoints()
+                    highlight:SetColorTexture(1, 1, 1, 0.3)
+                    
+                    button.soundPreviewRegion:SetScript("OnClick", function(self, btn)
+                        if btn == "LeftButton" then
+                            local soundChannel = content.soundChannelDropDown.selectedValue or "Master"
+                            if soundPath then
+                                if type(soundPath) == "number" then
+                                    PlaySoundFile(soundPath, soundChannel)
+                                elseif type(soundPath) == "string" then
+                                    if not soundPath:find("[/\\\\]") then
+                                        local lsmSound = wt.LSM:Fetch("sound", soundPath)
+                                        if lsmSound then
+                                            soundPath = lsmSound
+                                        end
+                                    end
+                                    PlaySoundFile(soundPath, soundChannel)
+                                end
+                            end
+                            -- Prevent menu from closing
+                            self:GetParent():GetParent():SetPropagateMouseClicks(false)
+                        end
+                    end)
+                    
+                    button.soundPreviewRegion:SetScript("OnEnter", function(self)
+                        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                        GameTooltip:SetText(L.BUTTON_PREVIEW_SOUND)
+                        GameTooltip:Show()
+                    end)
+                    
+                    button.soundPreviewRegion:SetScript("OnLeave", function(self)
+                        GameTooltip:Hide()
+                    end)
+                end
+            end)
+        end
+        
+        -- None option (no preview button)
+        rootDescription:CreateRadio(L.SOUND_NONE, function() return dropdown.selectedValue == "None" end, function()
+            dropdown.selectedValue = "None"
+            dropdown.selectedPath = nil
+            content.soundCustomEdit:Hide()
+        end)
+        
+        -- Custom option (no preview button, as path is unknown until entered)
+        rootDescription:CreateRadio(L.SOUND_CUSTOM, function() return dropdown.selectedValue == "Custom" end, function()
+            dropdown.selectedValue = "Custom"
+            dropdown.selectedPath = nil
+            content.soundCustomEdit:Show()
+        end)
+        
+        -- LSM sounds
+        local sounds = wt.LSM:List("sound")
+        if #sounds > 0 then
+            rootDescription:CreateDivider()
+            local soundsHeader = rootDescription:CreateButton("=== SOUNDS ===")
+            soundsHeader:SetEnabled(false)
+            
+            for _, soundName in ipairs(sounds) do
+                -- Skip "None" from LSM list if it exists
+                if soundName:lower() ~= "none" then
+                    local soundPath = wt.LSM:Fetch("sound", soundName)
+                    local radio = rootDescription:CreateRadio(soundName, function() return dropdown.selectedValue == soundName end, function()
+                        dropdown.selectedValue = soundName
+                        dropdown.selectedPath = soundPath
+                        content.soundCustomEdit:Hide()
+                    end)
+                    
+                    -- Add preview button to this item
+                    AddPreviewButton(radio, soundPath, soundName)
+                end
+            end
+        end
+    end)
+
+    content.soundLabel = content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    content.soundLabel:SetPoint("BOTTOMLEFT", content.soundDropDown, "TOPLEFT", 0, 3)
+    content.soundLabel:SetText(L.LABEL_SOUND)
+    
+    -- Sound Custom Path Edit
+    content.soundCustomEdit = wt:CreateEditBox(content, 245, nil, L.PLACEHOLDER_SOUND)
+    content.soundCustomEdit:SetPoint("TOPLEFT", content.soundDropDown, "BOTTOMLEFT", 5, -8)
+    content.soundCustomEdit:Hide()
+
+    -- Sound Channel Dropdown
+    content.soundChannelDropDown = wt:CreateDropdown(content, "WT_SoundChannelDropdown", 130, L.SOUND_CHANNEL_MASTER, "Master")
+    content.soundChannelDropDown:SetPoint("LEFT", content.soundDropDown, "RIGHT", 12, 0)
+    content.soundChannelDropDown:SetupMenu(function(dropdown, rootDescription)
+        local channels = {
+            {name = L.SOUND_CHANNEL_MASTER, value = "Master"},
+            {name = L.SOUND_CHANNEL_SFX, value = "SFX"},
+            {name = L.SOUND_CHANNEL_MUSIC, value = "Music"},
+            {name = L.SOUND_CHANNEL_AMBIENCE, value = "Ambience"},
+            {name = L.SOUND_CHANNEL_DIALOG, value = "Dialog"}
+        }
+        
+        for _, channel in ipairs(channels) do
+            rootDescription:CreateRadio(channel.name, function() return dropdown.selectedValue == channel.value end, function()
+                dropdown.selectedValue = channel.value
+            end)
+        end
+    end)
+
+    content.soundChannelLabel = content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    content.soundChannelLabel:SetPoint("BOTTOMLEFT", content.soundChannelDropDown, "TOPLEFT", 0, 3)
+    content.soundChannelLabel:SetText(L.LABEL_SOUND_CHANNEL)
 
     wt.frame.right.conditionsPanel = CreateFrame("Frame", nil, wt.frame.right, nil)
     wt.frame.right.conditionsPanel:SetSize(500, 370)
@@ -931,7 +1270,7 @@ function wt:CreateUI()
     wt.frame.right.advancedPanel.eventsLabel:SetText(L.LABEL_EVENTS)
     wt.frame.right.advancedPanel.eventsLabel:SetJustifyH("LEFT")
 
-    wt.frame.right.advancedPanel.eventsEdit = wt:CreateEditBox(wt.frame.right.advancedPanel, 290, nil, L.PLACEHOLDER_EVENTS)
+    wt.frame.right.advancedPanel.eventsEdit = wt:CreateEditBox(wt.frame.right.advancedPanel, 315, nil, L.PLACEHOLDER_EVENTS)
     wt.frame.right.advancedPanel.eventsEdit:SetPoint("TOPLEFT", wt.frame.right.advancedPanel.eventsLabel, "BOTTOMLEFT", 5, -5)
 
     wt.frame.right.advancedPanel.eventsEdit:HookScript("OnTextChanged", function(self)
@@ -976,7 +1315,7 @@ function wt:CreateUI()
 
     wt.frame.right.advancedPanel.triggerContainer = CreateFrame("Frame", nil, wt.frame.right.advancedPanel, "BackdropTemplate")
     wt.frame.right.advancedPanel.triggerContainer:SetPoint("TOPLEFT", wt.frame.right.advancedPanel.triggerLabel, "BOTTOMLEFT", 0, -5)
-    wt.frame.right.advancedPanel.triggerContainer:SetSize(380, 230)
+    wt.frame.right.advancedPanel.triggerContainer:SetSize(395, 230)
     wt.frame.right.advancedPanel.triggerContainer:SetBackdrop(wt.multiLineEditBoxBackdrop)
     wt.frame.right.advancedPanel.triggerContainer:SetBackdropColor(0, 0, 0, 0.8)
     wt.frame.right.advancedPanel.triggerContainer:SetBackdropBorderColor(0.5, 0.5, 0.5, 1)
@@ -1015,6 +1354,7 @@ function wt:CreateUI()
     wt.frame.right.advancedPanel.triggerScrollBar = CreateFrame("EventFrame", nil, wt.frame.right.advancedPanel.triggerContainer, "MinimalScrollBar")
     wt.frame.right.advancedPanel.triggerScrollBar:SetPoint("TOPLEFT", wt.frame.right.advancedPanel.triggerScrollFrame, "TOPRIGHT", 2, 0)
     wt.frame.right.advancedPanel.triggerScrollBar:SetPoint("BOTTOMLEFT", wt.frame.right.advancedPanel.triggerScrollFrame, "BOTTOMRIGHT", 2, 0)
+    wt.frame.right.advancedPanel.triggerScrollBar:SetScale(0.65)
     wt.frame.right.advancedPanel.triggerScrollBar:SetHideIfUnscrollable(true)
 
     wt.frame.right.advancedPanel.triggerEdit = CreateFrame("EditBox", nil, wt.frame.right.advancedPanel.triggerScrollFrame)
@@ -1074,7 +1414,7 @@ function wt:CreateUI()
 
     wt.frame.right.advancedPanel.errorContainer = CreateFrame("Frame", nil, wt.frame.right.advancedPanel, "BackdropTemplate")
     wt.frame.right.advancedPanel.errorContainer:SetPoint("TOPLEFT", wt.frame.right.advancedPanel.triggerContainer, "BOTTOMLEFT", 0, -5)
-    wt.frame.right.advancedPanel.errorContainer:SetSize(380, 40)
+    wt.frame.right.advancedPanel.errorContainer:SetSize(395, 40)
     wt.frame.right.advancedPanel.errorContainer:SetBackdrop(wt.multiLineEditBoxBackdrop)
     wt.frame.right.advancedPanel.errorContainer:SetBackdropColor(0.2, 0, 0, 0.8)
     wt.frame.right.advancedPanel.errorContainer:SetBackdropBorderColor(0.8, 0, 0, 1)

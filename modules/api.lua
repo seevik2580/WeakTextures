@@ -241,6 +241,11 @@ end
 --   textLeftPoint = "LEFT",
 --   textRightPoint = "RIGHT",
 --   texture = "TextureFullPath",
+--   type = "static", -- or "motion" to switch animation type
+--   columns = 8, -- for motion type
+--   rows = 4, -- for motion type
+--   totalFrames = 32, -- for motion type
+--   fps = 30, -- for motion type
 --   sound = "SoundFullPath",
 --   soundChannel = "Master"
 -- })
@@ -271,26 +276,148 @@ function WeakTexturesAPI:CreateInstance(data)
                 preset.tempOverrides = {}
             end
             
-            -- Store all override parameters
-            if data.offsetX then preset.tempOverrides.offsetX = data.offsetX end
-            if data.offsetY then preset.tempOverrides.offsetY = data.offsetY end
-            if data.scale then preset.tempOverrides.scale = data.scale end
-            if data.alpha then preset.tempOverrides.alpha = data.alpha end
-            if data.font then preset.tempOverrides.font = data.font end
-            if data.fontSize then preset.tempOverrides.fontSize = data.fontSize end
-            if data.fontOutline then preset.tempOverrides.fontOutline = data.fontOutline end
-            if data.textColor then preset.tempOverrides.textColor = data.textColor end
-            if data.text then preset.tempOverrides.text = data.text end
-            if data.textOffsetX then preset.tempOverrides.textOffsetX = data.textOffsetX end
-            if data.textOffsetY then preset.tempOverrides.textOffsetY = data.textOffsetY end
-            if data.textLeftPoint then preset.tempOverrides.textLeftPoint = data.textLeftPoint end
-            if data.textRightPoint then preset.tempOverrides.textRightPoint = data.textRightPoint end
-            if data.texture then preset.tempOverrides.texture = data.texture end
+            -- Also store as instance defaults (won't be cleared, used by timeline)
+            if not preset.instanceDefaults then
+                preset.instanceDefaults = {}
+            end
+            
+            -- Store all override parameters (use ~= nil for values that can be 0 or false)
+            if data.offsetX then 
+                preset.tempOverrides.offsetX = data.offsetX 
+                preset.instanceDefaults.offsetX = data.offsetX
+            end
+            if data.offsetY then 
+                preset.tempOverrides.offsetY = data.offsetY 
+                preset.instanceDefaults.offsetY = data.offsetY
+            end
+            if data.scale then 
+                preset.tempOverrides.scale = data.scale 
+                preset.instanceDefaults.scale = data.scale
+            end
+            if data.alpha ~= nil then 
+                preset.tempOverrides.alpha = data.alpha 
+                preset.instanceDefaults.alpha = data.alpha
+            end
+            
+            -- Display properties
+            if data.width then 
+                preset.tempOverrides.width = data.width 
+                preset.instanceDefaults.width = data.width
+            end
+            if data.height then 
+                preset.tempOverrides.height = data.height 
+                preset.instanceDefaults.height = data.height
+            end
+            if data.angle ~= nil then 
+                preset.tempOverrides.angle = data.angle 
+                preset.instanceDefaults.angle = data.angle
+            end
+            if data.anchor then 
+                preset.tempOverrides.anchor = data.anchor 
+                preset.instanceDefaults.anchor = data.anchor
+            end
+            if data.x ~= nil then 
+                preset.tempOverrides.x = data.x 
+                preset.instanceDefaults.x = data.x
+            end
+            if data.y ~= nil then 
+                preset.tempOverrides.y = data.y 
+                preset.instanceDefaults.y = data.y
+            end
+            
+            -- Layering
+            if data.strata then 
+                preset.tempOverrides.strata = data.strata 
+                preset.instanceDefaults.strata = data.strata
+            end
+            if data.frameLevel then 
+                preset.tempOverrides.frameLevel = data.frameLevel 
+                preset.instanceDefaults.frameLevel = data.frameLevel
+            end
+            
+            -- Stop Motion animation parameters
+            if data.columns then 
+                preset.tempOverrides.columns = data.columns 
+                preset.instanceDefaults.columns = data.columns
+            end
+            if data.rows then 
+                preset.tempOverrides.rows = data.rows 
+                preset.instanceDefaults.rows = data.rows
+            end
+            if data.totalFrames then 
+                preset.tempOverrides.totalFrames = data.totalFrames 
+                preset.instanceDefaults.totalFrames = data.totalFrames
+            end
+            if data.fps then 
+                preset.tempOverrides.fps = data.fps 
+                preset.instanceDefaults.fps = data.fps
+            end
+            
+            -- Texture settings
+            if data.texture then 
+                preset.tempOverrides.texture = data.texture 
+                preset.instanceDefaults.texture = data.texture
+            end
+            if data.color then 
+                preset.tempOverrides.color = data.color 
+                preset.instanceDefaults.color = data.color
+            end
+            
+            -- Text overlay
+            if data.text then 
+                preset.tempOverrides.text = data.text 
+                preset.instanceDefaults.text = data.text
+            end
+            if data.font then 
+                preset.tempOverrides.font = data.font 
+                preset.instanceDefaults.font = data.font
+            end
+            if data.fontSize then 
+                preset.tempOverrides.fontSize = data.fontSize 
+                preset.instanceDefaults.fontSize = data.fontSize
+            end
+            if data.fontOutline then 
+                preset.tempOverrides.fontOutline = data.fontOutline 
+                preset.instanceDefaults.fontOutline = data.fontOutline
+            end
+            if data.textColor then 
+                preset.tempOverrides.textColor = data.textColor 
+                preset.instanceDefaults.textColor = data.textColor
+            end
+            if data.textOffsetX then 
+                preset.tempOverrides.textOffsetX = data.textOffsetX 
+                preset.instanceDefaults.textOffsetX = data.textOffsetX
+            end
+            if data.textOffsetY then 
+                preset.tempOverrides.textOffsetY = data.textOffsetY 
+                preset.instanceDefaults.textOffsetY = data.textOffsetY
+            end
+            if data.textLeftPoint then 
+                preset.tempOverrides.textLeftPoint = data.textLeftPoint 
+                preset.instanceDefaults.textLeftPoint = data.textLeftPoint
+            end
+            if data.textRightPoint then 
+                preset.tempOverrides.textRightPoint = data.textRightPoint 
+                preset.instanceDefaults.textRightPoint = data.textRightPoint
+            end
+            
+            -- Animation type (static vs motion)
+            if data.type then
+                preset.tempOverrides.type = data.type
+                preset.instanceDefaults.type = data.type
+            end
             
             -- Store sound to play when preset is shown (not immediately)
             if data.sound then
                 preset.tempOverrides.sound = data.sound
                 preset.tempOverrides.soundChannel = data.soundChannel or "Master"
+                preset.instanceDefaults.sound = data.sound
+                preset.instanceDefaults.soundChannel = data.soundChannel or "Master"
+            end
+            
+            -- Store timeline for processing in RefreshPreset
+            if data.timeline then
+                preset.timeline = data.timeline
             end
         end
         return true
@@ -319,22 +446,91 @@ function WeakTexturesAPI:RefreshPreset(showTexture)
     if showTexture then
         wt:ApplyPreset(presetName)
         
+        -- Cancel existing timeline timers if any
+        if preset.timelineTimers then
+            for _, timer in ipairs(preset.timelineTimers) do
+                timer:Cancel()
+            end
+            preset.timelineTimers = nil
+        end
+        
         -- Cancel existing auto-hide timer if any
         if preset.autoHideTimer then
             preset.autoHideTimer:Cancel()
             preset.autoHideTimer = nil
         end
         
-        -- Start auto-hide timer if duration is set
+        -- Check if timeline has destroy event (must be before timeline processing for auto-hide check)
+        local hasDestroyEvent = false
+        if preset.timeline then
+            for _, evt in ipairs(preset.timeline) do
+                if evt.destroy then
+                    hasDestroyEvent = true
+                    break
+                end
+            end
+        end
+        
+        -- Process timeline if defined
+        if preset.timeline then
+            preset.timelineTimers = {}
+            local duration = preset.duration or 0
+            
+            for i, event in ipairs(preset.timeline) do
+                local delay = event.delay or 0
+                
+                -- Validate delay against duration
+                if duration > 0 and delay > duration then
+                    print(string.format("[WeakTextures] WARNING: Timeline event #%d has delay %.2fs which exceeds preset duration %.2fs", i, delay, duration))
+                end
+                
+                local timer = C_Timer.NewTimer(delay, function()
+                    -- Update parameters
+                    if event.update then
+                        local container = wt.activeFramesByPreset[presetName]
+                        if container and container.frame then
+                            -- Update existing frame without restarting animation
+                            wt:UpdateExistingFrame(presetName, container, event.update)
+                        end
+                    end
+                    
+                    -- Destroy instance
+                    if event.destroy then
+                        WeakTexturesAPI._currentPreset = presetName
+                        WeakTexturesAPI:RefreshPreset(false)
+                        WeakTexturesAPI._currentPreset = nil
+                        preset.timeline = nil
+                        preset.timelineTimers = nil
+                    end
+                end)
+                
+                table.insert(preset.timelineTimers, timer)
+            end
+        end
+        
+        -- Start auto-hide timer if duration is set (but NOT if timeline has destroy event)
         local duration = preset.duration
         if duration and duration > 0 then
-            preset.autoHideTimer = C_Timer.NewTimer(duration, function()
-                wt:HideTextureFrame(presetName)
-                preset.autoHideTimer = nil
-            end)
+            if not (preset.timeline and hasDestroyEvent) then
+                preset.autoHideTimer = C_Timer.NewTimer(duration, function()
+                    wt:HideTextureFrame(presetName)
+                    preset.autoHideTimer = nil
+                    preset.timeline = nil
+                    preset.timelineTimers = nil
+                end)
+            end
         end
     else
         wt:HideTextureFrame(presetName)
+        
+        -- Clear timeline state
+        if preset.timelineTimers then
+            for _, timer in ipairs(preset.timelineTimers) do
+                timer:Cancel()
+            end
+            preset.timelineTimers = nil
+        end
+        preset.timeline = nil
     end
     
     return true

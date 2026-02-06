@@ -1,4 +1,4 @@
-﻿-- =====================================================
+-- =====================================================
 -- WeakTextures Helpers
 -- =====================================================
 local _, wt = ...
@@ -576,46 +576,41 @@ function wt:CreateAnchoredTexture(presetName, anchorName, texturePath, width, he
     
     -- Apply alpha
     local alpha = (preset and preset.alpha) or 1
-    if preset and preset.tempOverrides and preset.tempOverrides.alpha then
+    if preset and preset.tempOverrides and preset.tempOverrides.alpha ~= nil then
         alpha = preset.tempOverrides.alpha
     end
     f:SetAlpha(alpha)
     
-    -- Handle text overlay from tempOverrides (single-instance mode)
+    -- Handle text overlay from tempOverrides (multi-instance mode) OR from preset.text (single-instance mode)
     if preset and preset.tempOverrides and preset.tempOverrides.text then
         if not f.fontString then
             f.fontString = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         end
         
-        -- Apply text offset
-        local textOffsetX = preset.tempOverrides.textOffsetX or 0
-        local textOffsetY = preset.tempOverrides.textOffsetY or 0
+        -- Apply text offset (use override, then preset.text fallback, then default)
+        local textOffsetX = preset.tempOverrides.textOffsetX or (preset.text and preset.text.offsetX) or wt.TEXT_DEFAULT_OFFSET_X
+        local textOffsetY = preset.tempOverrides.textOffsetY or (preset.text and preset.text.offsetY) or wt.TEXT_DEFAULT_OFFSET_Y
         local textLeftPoint = preset.tempOverrides.textLeftPoint or "CENTER"
         local textRightPoint = preset.tempOverrides.textRightPoint or "CENTER"
         f.fontString:ClearAllPoints()
         f.fontString:SetPoint(textLeftPoint, f, textRightPoint, textOffsetX, textOffsetY)
         
-        -- Apply font settings INDEPENDENTLY (fontSize can change without font)
-        if preset.tempOverrides.font or preset.tempOverrides.fontSize or preset.tempOverrides.fontOutline then
-            local font = preset.tempOverrides.font
-            local fontSize = preset.tempOverrides.fontSize or 24
-            local fontOutline = preset.tempOverrides.fontOutline or "OUTLINE"
-            
-            -- If font is from LSM, fetch it
-            if font then
-                if not font:match("^Interface") and not font:match("^Fonts") then
-                    font = wt.LSM:Fetch("font", font) or font
-                end
-            else
-                -- Use current font if not specified
-                local currentFont = f.fontString:GetFont()
-                font = currentFont or "Fonts\\FRIZQT__.TTF"
+        -- Always apply font settings (use override, then preset.text fallback, then default)
+        local font = preset.tempOverrides.font or (preset.text and preset.text.font) or "Fonts\\FRIZQT__.TTF"
+        local fontSize = preset.tempOverrides.fontSize or (preset.text and preset.text.size) or wt.TEXT_DEFAULT_SIZE
+        local fontOutline = preset.tempOverrides.fontOutline or (preset.text and preset.text.outline) or wt.TEXT_DEFAULT_OUTLINE
+        
+        -- If font is from LSM, fetch it
+        if not font:match("^Interface") and not font:match("^Fonts") then
+            local lsmFont = wt.LSM:Fetch("font", font)
+            if lsmFont then
+                font = lsmFont
             end
-            
-            f.fontString:SetFont(font, fontSize, fontOutline)
         end
         
-        -- Apply text color if provided
+        f.fontString:SetFont(font, fontSize, fontOutline)
+        
+        -- Apply text color (use override, then preset.text fallback, then default)
         if preset.tempOverrides.textColor then
             f.fontString:SetTextColor(
                 preset.tempOverrides.textColor.r or 1,
@@ -623,12 +618,121 @@ function wt:CreateAnchoredTexture(presetName, anchorName, texturePath, width, he
                 preset.tempOverrides.textColor.b or 1,
                 preset.tempOverrides.textColor.a or 1
             )
+        elseif preset.text and preset.text.color then
+            -- Use preset default color
+            f.fontString:SetTextColor(
+                preset.text.color.r, preset.text.color.g,
+                preset.text.color.b, preset.text.color.a)
+        else
+            -- Default gold color like GameFontNormal
+            f.fontString:SetTextColor(wt.TEXT_DEFAULT_COLOR.r, wt.TEXT_DEFAULT_COLOR.g, wt.TEXT_DEFAULT_COLOR.b, wt.TEXT_DEFAULT_COLOR.a)
         end
         
         f.fontString:SetText(preset.tempOverrides.text)
         f.fontString:Show()
+    elseif preset and preset.text and preset.text.enabled then
+        -- Single-instance mode: apply text settings from preset.text (even if content is empty for dynamic text)
+        if not f.fontString then
+            f.fontString = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        end
+        
+        -- Apply text offset from preset.text
+        local textOffsetX = preset.text.offsetX or wt.TEXT_DEFAULT_OFFSET_X
+        local textOffsetY = preset.text.offsetY or wt.TEXT_DEFAULT_OFFSET_Y
+        f.fontString:ClearAllPoints()
+        f.fontString:SetPoint("CENTER", f, "CENTER", textOffsetX, textOffsetY)
+        
+        -- Apply font settings from preset.text
+        local font = preset.text.font or "Fonts\\FRIZQT__.TTF"
+        local fontSize = preset.text.size or wt.TEXT_DEFAULT_SIZE
+        local fontOutline = preset.text.outline or wt.TEXT_DEFAULT_OUTLINE
+        
+        -- If font is from LSM, fetch it
+        if not font:match("^Interface") and not font:match("^Fonts") then
+            local lsmFont = wt.LSM:Fetch("font", font)
+            if lsmFont then
+                font = lsmFont
+            end
+        end
+        
+        f.fontString:SetFont(font, fontSize, fontOutline)
+        
+        -- Apply text color from preset.text
+        if preset.text.color then
+            f.fontString:SetTextColor(
+                preset.text.color.r or 1,
+                preset.text.color.g or 0.82,
+                preset.text.color.b or 0,
+                preset.text.color.a or 1
+            )
+        else
+            -- Default gold color like GameFontNormal
+            f.fontString:SetTextColor(wt.TEXT_DEFAULT_COLOR.r, wt.TEXT_DEFAULT_COLOR.g, wt.TEXT_DEFAULT_COLOR.b, wt.TEXT_DEFAULT_COLOR.a)
+        end
+        
+        -- Set text content if provided (can be empty for dynamic text)
+        if preset.text.content and preset.text.content ~= "" then
+            f.fontString:SetText(preset.text.content)
+        else
+            -- No content yet, but fontString is configured and ready for dynamic text
+            f.fontString:SetText("")
+        end
+        f.fontString:Show()
     elseif f.fontString then
         f.fontString:Hide()
+    end
+    
+    -- Handle animation type change (static vs motion)
+    local animType = (preset and preset.tempOverrides and preset.tempOverrides.type) or (preset and preset.type) or "static"
+    
+    if animType == "motion" then
+        -- Start/restart stop motion animation
+        local columns = (preset and preset.tempOverrides and preset.tempOverrides.columns) or (preset and preset.columns) or 1
+        local rows = (preset and preset.tempOverrides and preset.tempOverrides.rows) or (preset and preset.rows) or 1
+        local totalFrames = (preset and preset.tempOverrides and preset.tempOverrides.totalFrames) or (preset and preset.totalFrames) or 1
+        local fps = (preset and preset.tempOverrides and preset.tempOverrides.fps) or (preset and preset.fps) or 30
+        
+        -- Cancel existing animation timer if any
+        if container.animationTimer then
+            container.animationTimer:Cancel()
+            container.animationTimer = nil
+        end
+        
+        -- Start animation from frame 0
+        container.currentFrame = 0
+        container.elapsed = 0
+        local frameDuration = 1 / fps
+        
+        container.animationTimer = C_Timer.NewTicker(frameDuration, function()
+            if not f or not f:IsVisible() then
+                if container.animationTimer then
+                    container.animationTimer:Cancel()
+                    container.animationTimer = nil
+                end
+                return
+            end
+            
+            container.currentFrame = (container.currentFrame + 1) % totalFrames
+            
+            local col = container.currentFrame % columns
+            local row = math.floor(container.currentFrame / columns) % rows
+            
+            local left = col / columns
+            local right = (col + 1) / columns
+            local top = row / rows
+            local bottom = (row + 1) / rows
+            
+            f.texture:SetTexCoord(left, right, top, bottom)
+        end)
+    else
+        -- Static texture - stop animation if running
+        if container.animationTimer then
+            container.animationTimer:Cancel()
+            container.animationTimer = nil
+        end
+        
+        -- Reset to full texture
+        f.texture:SetTexCoord(0, 1, 0, 1)
     end
     
     f:Show()
@@ -728,6 +832,16 @@ function wt:PlayStopMotion(presetName, anchorName, texturePath, width, height, x
     f:SetFrameStrata(strata)
     f:SetFrameLevel(frameLevel)
     f.texture:SetTexture(texturePath)
+    
+    -- Set vertex color (applies to entire texture, not per-frame)
+    local r, g, b, a = 1, 1, 1, 1
+    if preset and preset.color then
+        r = preset.color.r or 1
+        g = preset.color.g or 1
+        b = preset.color.b or 1
+        a = preset.color.a or 1
+    end
+    f.texture:SetVertexColor(r, g, b, a)
 
     -- Apply rotation
     local angle = (preset and preset.angle) or 0
@@ -742,20 +856,20 @@ function wt:PlayStopMotion(presetName, anchorName, texturePath, width, height, x
     
     -- Apply alpha
     local alpha = (preset and preset.alpha) or 1
-    if preset and preset.tempOverrides and preset.tempOverrides.alpha then
+    if preset and preset.tempOverrides and preset.tempOverrides.alpha ~= nil then
         alpha = preset.tempOverrides.alpha
     end
     f:SetAlpha(alpha)
     
-    -- Handle text overlay from tempOverrides (multi-instance mode)
+    -- Handle text overlay from tempOverrides (multi-instance mode) OR from preset.text (single-instance mode)
     if preset and preset.tempOverrides and preset.tempOverrides.text then
         if not f.fontString then
             f.fontString = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         end
         
         -- Apply text offset
-        local textOffsetX = preset.tempOverrides.textOffsetX or 0
-        local textOffsetY = preset.tempOverrides.textOffsetY or 0
+        local textOffsetX = preset.tempOverrides.textOffsetX or wt.TEXT_DEFAULT_OFFSET_X
+        local textOffsetY = preset.tempOverrides.textOffsetY or wt.TEXT_DEFAULT_OFFSET_Y
         local textLeftPoint = preset.tempOverrides.textLeftPoint or "CENTER"
         local textRightPoint = preset.tempOverrides.textRightPoint or "CENTER"
         f.fontString:ClearAllPoints()
@@ -764,8 +878,8 @@ function wt:PlayStopMotion(presetName, anchorName, texturePath, width, height, x
         -- Apply font settings INDEPENDENTLY for PlayStopMotion (fontSize can change without font)
         if preset.tempOverrides.font or preset.tempOverrides.fontSize or preset.tempOverrides.fontOutline then
             local font = preset.tempOverrides.font
-            local fontSize = preset.tempOverrides.fontSize or 24
-            local fontOutline = preset.tempOverrides.fontOutline or "OUTLINE"
+            local fontSize = preset.tempOverrides.fontSize or wt.TEXT_DEFAULT_SIZE
+            local fontOutline = preset.tempOverrides.fontOutline or wt.TEXT_DEFAULT_OUTLINE
             
             -- If font is from LSM, fetch it
             if font then
@@ -789,9 +903,60 @@ function wt:PlayStopMotion(presetName, anchorName, texturePath, width, height, x
                 preset.tempOverrides.textColor.b or 1,
                 preset.tempOverrides.textColor.a or 1
             )
+        else
+            -- Default gold color like GameFontNormal
+            f.fontString:SetTextColor(1, 0.82, 0, 1)
         end
         
         f.fontString:SetText(preset.tempOverrides.text)
+        f.fontString:Show()
+    elseif preset and preset.text and preset.text.enabled then
+        -- Single-instance mode: apply text settings from preset.text (even if content is empty for dynamic text)
+        if not f.fontString then
+            f.fontString = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        end
+        
+        -- Apply text offset from preset.text
+        local textOffsetX = preset.text.offsetX or wt.TEXT_DEFAULT_OFFSET_X
+        local textOffsetY = preset.text.offsetY or wt.TEXT_DEFAULT_OFFSET_Y
+        f.fontString:ClearAllPoints()
+        f.fontString:SetPoint("CENTER", f, "CENTER", textOffsetX, textOffsetY)
+        
+        -- Apply font settings from preset.text
+        local font = preset.text.font or "Fonts\\FRIZQT__.TTF"
+        local fontSize = preset.text.size or wt.TEXT_DEFAULT_SIZE
+        local fontOutline = preset.text.outline or wt.TEXT_DEFAULT_OUTLINE
+        
+        -- If font is from LSM, fetch it
+        if not font:match("^Interface") and not font:match("^Fonts") then
+            local lsmFont = wt.LSM:Fetch("font", font)
+            if lsmFont then
+                font = lsmFont
+            end
+        end
+        
+        f.fontString:SetFont(font, fontSize, fontOutline)
+        
+        -- Apply text color from preset.text
+        if preset.text.color then
+            f.fontString:SetTextColor(
+                preset.text.color.r or 1,
+                preset.text.color.g or 0.82,
+                preset.text.color.b or 0,
+                preset.text.color.a or 1
+            )
+        else
+            -- Default gold color like GameFontNormal
+            f.fontString:SetTextColor(wt.TEXT_DEFAULT_COLOR.r, wt.TEXT_DEFAULT_COLOR.g, wt.TEXT_DEFAULT_COLOR.b, wt.TEXT_DEFAULT_COLOR.a)
+        end
+        
+        -- Set text content if provided (can be empty for dynamic text)
+        if preset.text.content and preset.text.content ~= "" then
+            f.fontString:SetText(preset.text.content)
+        else
+            -- No content yet, but fontString is configured and ready for dynamic text
+            f.fontString:SetText("")
+        end
         f.fontString:Show()
     elseif f.fontString then
         f.fontString:Hide()
@@ -867,6 +1032,283 @@ function wt:PlayStopMotion(presetName, anchorName, texturePath, width, height, x
     end
 end
 
+---Update existing frame with new parameters without restarting animation
+---@param presetName string
+---@param container table
+---@param overrides table
+function wt:UpdateExistingFrame(presetName, container, overrides)
+    if not container or not container.frame or not overrides then
+        return
+    end
+    
+    local frame = container.frame
+    local preset = WeakTexturesDB.presets[presetName]
+    
+    -- Update size (only if explicitly provided in override)
+    if overrides.width or overrides.height then
+        local currentWidth, currentHeight = frame:GetSize()
+        local width = overrides.width or currentWidth
+        local height = overrides.height or currentHeight
+        frame:SetSize(width, height)
+    end
+    
+    -- Update layering (only if explicitly provided in override)
+    if overrides.strata then
+        frame:SetFrameStrata(overrides.strata)
+    end
+    if overrides.frameLevel then
+        frame:SetFrameLevel(overrides.frameLevel)
+    end
+    
+    -- Update texture (only if explicitly provided in override)
+    if overrides.texture then
+        local texturePath = overrides.texture
+        
+        -- If texture name has no slashes, try LSM lookup
+        if not texturePath:find("[/\\]") then
+            local lsmTexture = self.LSM:Fetch("background", texturePath)
+            if lsmTexture then
+                texturePath = lsmTexture
+            end
+        end
+        
+        if frame.texture then
+            frame.texture:SetTexture(texturePath)
+            
+            -- For static textures, reset tex coords
+            if preset.type ~= "motion" then
+                frame.texture:SetTexCoord(0, 1, 0, 1)
+            end
+        end
+    end
+    
+    -- Update vertex color (only if explicitly provided in override)
+    if overrides.color and frame.texture then
+        frame.texture:SetVertexColor(
+            overrides.color.r or 1,
+            overrides.color.g or 1,
+            overrides.color.b or 1,
+            overrides.color.a or 1
+        )
+    end
+    
+    -- Update rotation (only if explicitly provided in override)
+    if overrides.angle ~= nil and frame.texture then
+        local angleRadians = math.rad(overrides.angle)
+        frame.texture:SetRotation(angleRadians)
+    end
+    
+    -- Update alpha (only if explicitly provided in override)
+    if overrides.alpha ~= nil then
+        frame:SetAlpha(overrides.alpha)
+    end
+    
+    -- Update scale (only if explicitly provided in override)
+    if overrides.scale then
+        frame:SetScale(overrides.scale)
+    end
+    
+    -- Update position (only if explicitly provided in override)
+    if overrides.anchor or overrides.x or overrides.y or overrides.offsetX or overrides.offsetY then
+        local textureData = preset.textures and preset.textures[1]
+        if textureData then
+            -- Use override anchor or fall back to preset anchor
+            local anchorName = overrides.anchor or textureData.anchor or "UIParent"
+            local anchor = _G[anchorName] or UIParent
+            
+            -- Base position (from override or preset)
+            local baseX = overrides.x or textureData.x or 0
+            local baseY = overrides.y or textureData.y or 0
+            
+            -- Add offset if provided
+            local offsetX = overrides.offsetX or 0
+            local offsetY = overrides.offsetY or 0
+            
+            local x = baseX + offsetX
+            local y = baseY + offsetY
+            
+            frame:ClearAllPoints()
+            frame:SetPoint("CENTER", anchor, "CENTER", x, y)
+        end
+    end
+    
+    -- Update stop motion animation parameters (only if explicitly provided in override)
+    if overrides.columns or overrides.rows or overrides.totalFrames or overrides.fps then
+        -- For stop motion animations, update animation parameters
+        -- Note: These changes won't restart the animation, just update the frame calculation
+        if preset.type == "motion" and frame.SetScript then
+            local columns = overrides.columns or preset.columns or 1
+            local rows = overrides.rows or preset.rows or 1
+            local totalFrames = overrides.totalFrames or preset.totalFrames or 1
+            local fps = overrides.fps or preset.fps or 30
+            
+            -- Store updated values for animation script
+            preset.columns = columns
+            preset.rows = rows
+            preset.totalFrames = totalFrames
+            preset.fps = fps
+            
+            -- Note: Animation script will use these new values on next frame
+        end
+    end
+    
+    -- Update or create text
+    if overrides.text or overrides.font or overrides.fontSize or overrides.fontOutline or overrides.textColor then
+        -- Create fontString if it doesn't exist and text is provided
+        if not frame.fontString and overrides.text then
+            frame.fontString = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            
+            -- Set default position if not specified
+            frame.fontString:SetPoint("CENTER", frame, "CENTER", 0, 0)
+        end
+        
+        if frame.fontString then
+            -- Update text content
+            if overrides.text then
+                frame.fontString:SetText(overrides.text)
+                frame.fontString:Show()
+            end
+            
+            -- Always apply font settings when text is present (use instanceDefaults, then preset.text as fallback)
+            local currentFont, currentSize, currentOutline = frame.fontString:GetFont()
+            local font = overrides.font or (preset.instanceDefaults and preset.instanceDefaults.font) or (preset.text and preset.text.font)
+            local fontSize = overrides.fontSize or (preset.instanceDefaults and preset.instanceDefaults.fontSize) or (preset.text and preset.text.size) or currentSize or wt.TEXT_DEFAULT_SIZE
+            local fontOutline = overrides.fontOutline or (preset.instanceDefaults and preset.instanceDefaults.fontOutline) or (preset.text and preset.text.outline) or currentOutline or wt.TEXT_DEFAULT_OUTLINE
+            
+            if font then
+                if not font:match("^Interface") and not font:match("^Fonts") then
+                    local lsmFont = self.LSM:Fetch("font", font)
+                    if lsmFont then
+                        font = lsmFont
+                    end
+                end
+            else
+                font = currentFont or "Fonts\\FRIZQT__.TTF"
+            end
+            
+            frame.fontString:SetFont(font, fontSize, fontOutline)
+            
+            -- Update text color (use preset.text.color as fallback before default)
+            if overrides.textColor then
+                frame.fontString:SetTextColor(
+                    overrides.textColor.r or 1,
+                    overrides.textColor.g or 1,
+                    overrides.textColor.b or 1,
+                    overrides.textColor.a or 1
+                )
+            elseif preset.instanceDefaults and preset.instanceDefaults.textColor then
+                frame.fontString:SetTextColor(
+                    preset.instanceDefaults.textColor.r or 1,
+                    preset.instanceDefaults.textColor.g or 1,
+                    preset.instanceDefaults.textColor.b or 1,
+                    preset.instanceDefaults.textColor.a or 1
+                )
+            elseif preset.text and preset.text.color then
+                frame.fontString:SetTextColor(
+                    preset.text.color.r,
+                    preset.text.color.g,
+                    preset.text.color.b,
+                    preset.text.color.a
+                )
+            else
+                -- Default gold color like GameFontNormal
+                frame.fontString:SetTextColor(wt.TEXT_DEFAULT_COLOR.r, wt.TEXT_DEFAULT_COLOR.g, wt.TEXT_DEFAULT_COLOR.b, wt.TEXT_DEFAULT_COLOR.a)
+            end
+            
+            -- Update text position (use instanceDefaults, then preset.text as fallback)
+            if overrides.textOffsetX or overrides.textOffsetY or overrides.textLeftPoint or overrides.textRightPoint then
+                local currentLeftPoint, _, currentRightPoint, currentX, currentY = frame.fontString:GetPoint(1)
+                local textOffsetX = overrides.textOffsetX or (preset.instanceDefaults and preset.instanceDefaults.textOffsetX) or (preset.text and preset.text.offsetX) or currentX or 0
+                local textOffsetY = overrides.textOffsetY or (preset.instanceDefaults and preset.instanceDefaults.textOffsetY) or (preset.text and preset.text.offsetY) or currentY or 0
+                local textLeftPoint = overrides.textLeftPoint or (preset.instanceDefaults and preset.instanceDefaults.textLeftPoint) or currentLeftPoint or "CENTER"
+                local textRightPoint = overrides.textRightPoint or (preset.instanceDefaults and preset.instanceDefaults.textRightPoint) or currentRightPoint or "CENTER"
+                
+                frame.fontString:ClearAllPoints()
+                frame.fontString:SetPoint(textLeftPoint, frame, textRightPoint, textOffsetX, textOffsetY)
+            end
+        end
+    end
+    
+    -- Play sound if specified
+    if overrides.sound then
+        local soundPath = overrides.sound
+        local soundChannel = overrides.soundChannel or (preset.sound and preset.sound.channel) or "Master"
+        
+        if type(soundPath) == "number" then
+            -- FileID, use directly
+            PlaySoundFile(soundPath, soundChannel)
+        elseif type(soundPath) == "string" then
+            -- String path or LSM name
+            if not soundPath:find("[/\\]") then
+                local lsmSound = self.LSM:Fetch("sound", soundPath)
+                if lsmSound then
+                    soundPath = lsmSound
+                end
+            end
+            PlaySoundFile(soundPath, soundChannel)
+        end
+    elseif overrides.soundKey then
+        -- Support for preset sound library
+        local soundChannel = overrides.soundChannel or (preset.sound and preset.sound.channel) or "Master"
+        self:PlayPresetSound(presetName, overrides.soundKey, soundChannel)
+    end
+    
+    -- Handle animation type change (static vs motion)
+    if overrides.type then
+        if overrides.type == "motion" then
+            -- Get motion parameters (use overrides if provided, otherwise use preset/instanceDefaults)
+            local columns = overrides.columns or (preset.instanceDefaults and preset.instanceDefaults.columns) or preset.columns or 1
+            local rows = overrides.rows or (preset.instanceDefaults and preset.instanceDefaults.rows) or preset.rows or 1
+            local totalFrames = overrides.totalFrames or (preset.instanceDefaults and preset.instanceDefaults.totalFrames) or preset.totalFrames or 1
+            local fps = overrides.fps or (preset.instanceDefaults and preset.instanceDefaults.fps) or preset.fps or 30
+            
+            -- Cancel existing animation timer if any
+            if container.animationTimer then
+                container.animationTimer:Cancel()
+                container.animationTimer = nil
+            end
+            
+            -- Start animation from frame 0
+            container.currentFrame = 0
+            container.elapsed = 0
+            local frameDuration = 1 / fps
+            
+            container.animationTimer = C_Timer.NewTicker(frameDuration, function()
+                if not frame or not frame:IsVisible() then
+                    if container.animationTimer then
+                        container.animationTimer:Cancel()
+                        container.animationTimer = nil
+                    end
+                    return
+                end
+                
+                container.currentFrame = (container.currentFrame + 1) % totalFrames
+                
+                local col = container.currentFrame % columns
+                local row = math.floor(container.currentFrame / columns) % rows
+                
+                local left = col / columns
+                local right = (col + 1) / columns
+                local top = row / rows
+                local bottom = (row + 1) / rows
+                
+                frame.texture:SetTexCoord(left, right, top, bottom)
+            end)
+        else
+            -- Static texture - stop animation if running
+            if container.animationTimer then
+                container.animationTimer:Cancel()
+                container.animationTimer = nil
+            end
+            
+            -- Reset to full texture
+            if frame.texture then
+                frame.texture:SetTexCoord(0, 1, 0, 1)
+            end
+        end
+    end
+end
+
 ---Hide and cleanup the texture frame for a preset
 ---@param presetName string
 function wt:HideTextureFrame(presetName)
@@ -893,6 +1335,11 @@ function wt:HideTextureFrame(presetName)
     end
 
     wt.activeFramesByPreset[presetName] = nil
+    
+    -- Clear instance defaults when hiding preset
+    if preset then
+        preset.instanceDefaults = nil
+    end
 end
 
 ---Get all available classes
@@ -940,39 +1387,62 @@ function wt:allDefault()
     wt.selectedPreset = nil
     wt.frame.right:Hide()
     wt.frame.right:EnableMouse(false)
-    wt.frame.right.configPanel.anchorTypeDropDown.selectedValue = "Screen"
-    wt.frame.right.configPanel.anchorEdit:SetText("UIParent")
-    wt.frame.right.configPanel.anchorEdit:Hide()
-    wt.frame.right.configPanel.selectFrameBtn:Hide()
-    wt.frame.right.configPanel.textureDropDown.selectedValue = "Custom"
-    wt.frame.right.configPanel.textureDropDown.selectedPath = nil
-    wt.frame.right.configPanel.textureCustomEdit:SetText("")
-    wt.frame.right.configPanel.textureCustomEdit:Show()
-    wt.frame.right.configPanel.widthEdit:SetText("")
-    wt.frame.right.configPanel.heightEdit:SetText("")
-    wt.frame.right.configPanel.scaleEdit:SetText(1)
-    wt.frame.right.configPanel.alphaEdit:SetText(1.0)
-    wt.frame.right.configPanel.angleEdit:SetText(0)
-    wt.frame.right.configPanel.xOffsetEdit:SetText(0)
-    wt.frame.right.configPanel.yOffsetEdit:SetText(0)
-    wt.frame.right.configPanel.groupDropDown.selectedValue = ""
-    wt.frame.right.configPanel.groupEditBox:SetText("")
-    wt.frame.right.configPanel.groupEditBox:Hide()
-    wt.frame.right.configPanel.presetNameEdit:SetText("")
-    wt.frame.right.configPanel.columnsEdit:SetText("")
-    wt.frame.right.configPanel.rowsEdit:SetText("")
-    wt.frame.right.configPanel.totalFramesEdit:SetText("")
-    wt.frame.right.configPanel.fpsEdit:SetText("")
+    wt.frame.right.configPanelContent.anchorTypeDropDown.selectedValue = "Screen"
+    wt.frame.right.configPanelContent.anchorEdit:SetText("UIParent")
+    wt.frame.right.configPanelContent.anchorEdit:Hide()
+    wt.frame.right.configPanelContent.selectFrameBtn:Hide()
+    wt.frame.right.configPanelContent.textureDropDown.selectedValue = "Custom"
+    wt.frame.right.configPanelContent.textureDropDown.selectedPath = nil
+    wt.frame.right.configPanelContent.textureCustomEdit:SetText("")
+    wt.frame.right.configPanelContent.textureCustomEdit:Show()
+    wt.frame.right.configPanelContent.widthEdit:SetText("")
+    wt.frame.right.configPanelContent.heightEdit:SetText("")
+    wt.frame.right.configPanelContent.scaleEdit:SetText(1)
+    wt.frame.right.configPanelContent.alphaEdit:SetText(1.0)
+    wt.frame.right.configPanelContent.angleEdit:SetText(0)
+    wt.frame.right.configPanelContent.xOffsetEdit:SetText(0)
+    wt.frame.right.configPanelContent.yOffsetEdit:SetText(0)
+    wt.frame.right.configPanelContent.groupDropDown.selectedValue = ""
+    wt.frame.right.configPanelContent.groupEditBox:SetText("")
+    wt.frame.right.configPanelContent.groupEditBox:Hide()
+    wt.frame.right.configPanelContent.presetNameEdit:SetText("")
+    wt.frame.right.configPanelContent.columnsEdit:SetText("")
+    wt.frame.right.configPanelContent.rowsEdit:SetText("")
+    wt.frame.right.configPanelContent.totalFramesEdit:SetText("")
+    wt.frame.right.configPanelContent.fpsEdit:SetText("")
+    
+    -- Reset text settings to defaults
+    wt.frame.right.configPanelContent.textContentEdit:SetText("")
+    wt.frame.right.configPanelContent.fontDropDown.selectedValue = "Friz Quadrata TT"
+    wt.frame.right.configPanelContent.fontSizeEdit:SetText(wt.TEXT_DEFAULT_SIZE or 48)
+    wt.frame.right.configPanelContent.fontOutlineDropDown.selectedValue = wt.TEXT_DEFAULT_OUTLINE or "OUTLINE"
+    
+    local defaultTextColor = wt.TEXT_DEFAULT_COLOR or {r=1, g=0.82, b=0, a=1}
+    wt.frame.right.configPanelContent.textColorPicker:SetColor(defaultTextColor.r, defaultTextColor.g, defaultTextColor.b, defaultTextColor.a)
+    
+    wt.frame.right.configPanelContent.textOffsetXEdit:SetText(wt.TEXT_DEFAULT_OFFSET_X or 0)
+    wt.frame.right.configPanelContent.textOffsetYEdit:SetText(wt.TEXT_DEFAULT_OFFSET_Y or 125)
+    
+    -- Reset texture color to white
+    wt.frame.right.configPanelContent.textureColorPicker:SetColor(1, 1, 1, 1)
+    
+    -- Reset sound settings
+    wt.frame.right.configPanelContent.soundDropDown.selectedValue = "None"
+    wt.frame.right.configPanelContent.soundDropDown.selectedPath = nil
+    wt.frame.right.configPanelContent.soundCustomEdit:SetText("")
+    wt.frame.right.configPanelContent.soundCustomEdit:Hide()
+    wt.frame.right.configPanelContent.soundChannelDropDown.selectedValue = "Master"
+    
     wt.frame.right.conditionsPanel.enabledCheck:SetChecked(true)
-    wt.frame.right.configPanel.frameLevelEdit:SetText("")
+    wt.frame.right.configPanelContent.frameLevelEdit:SetText("")
     wt.frame.right.conditionsPanel.aliveCheck:SetChecked(false)
     wt.frame.right.conditionsPanel.combatCheck:SetChecked(false)
     wt.frame.right.conditionsPanel.restedCheck:SetChecked(false)
     wt:SetShownMotionFields(false)
-    wt.frame.right.configPanel.ftypeDropDown.selectedValue = "Static"
+    wt.frame.right.configPanelContent.ftypeDropDown.selectedValue = "Static"
     wt.frame.right.conditionsPanel.classDropDown.selectedValue = "Any Class"
     wt.frame.right.conditionsPanel.specDropDown.selectedValue = "Any Spec"
-    wt.frame.right.configPanel.strataDropDown.selectedValue = "MEDIUM"
+    wt.frame.right.configPanelContent.strataDropDown.selectedValue = "MEDIUM"
     
     -- Reset advanced conditions
     wt.frame.right.conditionsPanel.advancedCheck:SetChecked(false)
@@ -983,8 +1453,8 @@ function wt:allDefault()
     wt.frame.right.advancedPanel.multiInstanceCheck:SetChecked(false)
     
     -- Disable unlock button when no preset is selected
-    wt.frame.right.configPanel.unlockFrameBtn:Disable()
-    wt.frame.right.configPanel.unlockFrameBtn:SetNormalAtlas(wt.buttonDisabled)
+    wt.frame.right.unlockFrameBtn:Disable()
+    wt.frame.right.unlockFrameBtn:SetNormalAtlas(wt.buttonDisabled)
 end
 
 ---Refresh the preset list display
@@ -1053,14 +1523,14 @@ end
 ---Show or hide stop-motion animation fields
 ---@param flag boolean
 function wt:SetShownMotionFields(flag)
-    wt.frame.right.configPanel.columnsLabel:SetShown(flag)
-    wt.frame.right.configPanel.columnsEdit:SetShown(flag)
-    wt.frame.right.configPanel.rowsLabel:SetShown(flag)
-    wt.frame.right.configPanel.rowsEdit:SetShown(flag)
-    wt.frame.right.configPanel.totalFramesLabel:SetShown(flag)
-    wt.frame.right.configPanel.totalFramesEdit:SetShown(flag)
-    wt.frame.right.configPanel.fpsLabel:SetShown(flag)
-    wt.frame.right.configPanel.fpsEdit:SetShown(flag)
+    wt.frame.right.configPanelContent.columnsLabel:SetShown(flag)
+    wt.frame.right.configPanelContent.columnsEdit:SetShown(flag)
+    wt.frame.right.configPanelContent.rowsLabel:SetShown(flag)
+    wt.frame.right.configPanelContent.rowsEdit:SetShown(flag)
+    wt.frame.right.configPanelContent.totalFramesLabel:SetShown(flag)
+    wt.frame.right.configPanelContent.totalFramesEdit:SetShown(flag)
+    wt.frame.right.configPanelContent.fpsLabel:SetShown(flag)
+    wt.frame.right.configPanelContent.fpsEdit:SetShown(flag)
 end
 
 ---Handle search box text change
@@ -1446,19 +1916,19 @@ function wt:OnAddTextureClick()
     
     wt.frame.right:EnableMouse(true)
     wt.frame.right:Show()
-    local newPresetName = strtrim(wt.frame.right.configPanel.presetNameEdit:GetText())
-    local anchorName = wt.frame.right.configPanel.anchorEdit:GetText() or "UIParent"
+    local newPresetName = strtrim(wt.frame.right.configPanelContent.presetNameEdit:GetText())
+    local anchorName = wt.frame.right.configPanelContent.anchorEdit:GetText() or "UIParent"
     
     -- Get texture path from dropdown or custom edit
     local texturePath = ""
-    if wt.frame.right.configPanel.textureDropDown.selectedValue == "Custom" then
-        texturePath = wt.frame.right.configPanel.textureCustomEdit:GetText() or ""
+    if wt.frame.right.configPanelContent.textureDropDown.selectedValue == "Custom" then
+        texturePath = wt.frame.right.configPanelContent.textureCustomEdit:GetText() or ""
         -- Auto-register custom texture if enabled
         if WeakTexturesSettings.autoRegisterCustomTextures and texturePath ~= "" then
             wt:RegisterCustomTexture(texturePath)
         end
     else
-        texturePath = wt.frame.right.configPanel.textureDropDown.selectedPath or ""
+        texturePath = wt.frame.right.configPanelContent.textureDropDown.selectedPath or ""
     end
     
     if anchorName == "" or texturePath == "" then return end
@@ -1553,11 +2023,11 @@ function wt:OnAddTextureClick()
         return
     end
 
-    local width = tonumber(wt.frame.right.configPanel.widthEdit:GetText())
-    local height = tonumber(wt.frame.right.configPanel.heightEdit:GetText())
-    local x = tonumber(wt.frame.right.configPanel.xOffsetEdit:GetText())
-    local y = tonumber(wt.frame.right.configPanel.yOffsetEdit:GetText())
-    local frameLevel = tonumber(wt.frame.right.configPanel.frameLevelEdit:GetText()) or 100
+    local width = tonumber(wt.frame.right.configPanelContent.widthEdit:GetText())
+    local height = tonumber(wt.frame.right.configPanelContent.heightEdit:GetText())
+    local x = tonumber(wt.frame.right.configPanelContent.xOffsetEdit:GetText())
+    local y = tonumber(wt.frame.right.configPanelContent.yOffsetEdit:GetText())
+    local frameLevel = tonumber(wt.frame.right.configPanelContent.frameLevelEdit:GetText()) or 100
     
     -- Only apply fallback if values are truly nil (not just 0 or negative)
     if width == nil or height == nil then
@@ -1576,25 +2046,25 @@ function wt:OnAddTextureClick()
     preset.enabled = wt.frame.right.conditionsPanel.enabledCheck:GetChecked()
     
     -- Save scale
-    local scale = tonumber(wt.frame.right.configPanel.scaleEdit:GetText()) or 1
+    local scale = tonumber(wt.frame.right.configPanelContent.scaleEdit:GetText()) or 1
     preset.scale = scale
     
     -- Save angle
-    local angle = tonumber(wt.frame.right.configPanel.angleEdit:GetText()) or 0
+    local angle = tonumber(wt.frame.right.configPanelContent.angleEdit:GetText()) or 0
     preset.angle = angle
     
     -- Save alpha
-    local alpha = tonumber(wt.frame.right.configPanel.alphaEdit:GetText()) or 1
+    local alpha = tonumber(wt.frame.right.configPanelContent.alphaEdit:GetText()) or 1
     preset.alpha = alpha
     
     -- Get group name from dropdown or editbox
     local groupName
-    if wt.frame.right.configPanel.groupDropDown.selectedValue == "__CREATE_NEW__" then
-        groupName = strtrim(wt.frame.right.configPanel.groupEditBox:GetText())
-    elseif wt.frame.right.configPanel.groupDropDown.selectedValue == "" then
+    if wt.frame.right.configPanelContent.groupDropDown.selectedValue == "__CREATE_NEW__" then
+        groupName = strtrim(wt.frame.right.configPanelContent.groupEditBox:GetText())
+    elseif wt.frame.right.configPanelContent.groupDropDown.selectedValue == "" then
         groupName = ""
     else
-        groupName = wt.frame.right.configPanel.groupDropDown.selectedValue
+        groupName = wt.frame.right.configPanelContent.groupDropDown.selectedValue
     end
 
     if preset.enabled then
@@ -1616,13 +2086,21 @@ function wt:OnAddTextureClick()
         WeakTexturesDB.groups["Disabled"] = true
     end
 
-    local presetType = (wt.frame.right.configPanel.ftypeDropDown.selectedValue == "Stop Motion") and "motion" or "static"
+    -- Store old type to detect type changes
+    local oldPresetType = preset.type
+    local presetType = (wt.frame.right.configPanelContent.ftypeDropDown.selectedValue == "Stop Motion") and "motion" or "static"
     preset.type = presetType
     if presetType == "motion" then
-        preset.columns = tonumber(wt.frame.right.configPanel.columnsEdit:GetText()) or 1
-        preset.rows = tonumber(wt.frame.right.configPanel.rowsEdit:GetText()) or 1
-        preset.totalFrames = tonumber(wt.frame.right.configPanel.totalFramesEdit:GetText()) or 1
-        preset.fps = tonumber(wt.frame.right.configPanel.fpsEdit:GetText()) or 30
+        preset.columns = tonumber(wt.frame.right.configPanelContent.columnsEdit:GetText()) or 1
+        preset.rows = tonumber(wt.frame.right.configPanelContent.rowsEdit:GetText()) or 1
+        preset.totalFrames = tonumber(wt.frame.right.configPanelContent.totalFramesEdit:GetText()) or 1
+        preset.fps = tonumber(wt.frame.right.configPanelContent.fpsEdit:GetText()) or 30
+    else
+        -- Clear motion-specific properties when switching to static
+        preset.columns = nil
+        preset.rows = nil
+        preset.totalFrames = nil
+        preset.fps = nil
     end
     preset.frameLevel = frameLevel
 
@@ -1648,6 +2126,56 @@ function wt:OnAddTextureClick()
         x = x,
         y = y
     }
+    
+    -- Text settings (stored separately in preset.text)
+    preset.text = preset.text or {}
+    local textContent = strtrim(wt.frame.right.configPanelContent.textContentEdit:GetText())
+    
+    -- Always enable text settings (even if content is empty, for dynamic text via timeline)
+    preset.text.enabled = true
+    preset.text.content = textContent
+    preset.text.font = wt.frame.right.configPanelContent.fontDropDown.selectedValue or "Friz Quadrata TT"
+    preset.text.size = tonumber(wt.frame.right.configPanelContent.fontSizeEdit:GetText()) or wt.TEXT_DEFAULT_SIZE or 48
+    preset.text.outline = wt.frame.right.configPanelContent.fontOutlineDropDown.selectedValue or wt.TEXT_DEFAULT_OUTLINE or "OUTLINE"
+    
+    -- Get text color from color picker
+    local tr, tg, tb, ta = wt.frame.right.configPanelContent.textColorPicker:GetColor()
+    preset.text.color = {
+        r = tr or 1,
+        g = tg or 0.82,
+        b = tb or 0,
+        a = ta or 1
+    }
+    
+    preset.text.offsetX = tonumber(wt.frame.right.configPanelContent.textOffsetXEdit:GetText()) or wt.TEXT_DEFAULT_OFFSET_X or 0
+    preset.text.offsetY = tonumber(wt.frame.right.configPanelContent.textOffsetYEdit:GetText()) or wt.TEXT_DEFAULT_OFFSET_Y or 125
+    
+    -- Texture color (vertex color)
+    local r, g, b, a = wt.frame.right.configPanelContent.textureColorPicker:GetColor()
+    preset.color = {
+        r = r or 1,
+        g = g or 1,
+        b = b or 1,
+        a = a or 1
+    }
+    
+    -- Sound settings
+    preset.sound = preset.sound or {}
+    
+    -- Get sound path (either from dropdown selected path or custom edit)
+    if wt.frame.right.configPanelContent.soundDropDown.selectedValue == "None" then
+        -- No sound
+        preset.sound.file = nil
+    elseif wt.frame.right.configPanelContent.soundDropDown.selectedValue == "Custom" then
+        local customSound = wt.frame.right.configPanelContent.soundCustomEdit:GetText()
+        preset.sound.file = (customSound and customSound ~= "") and customSound or nil
+    else
+        -- LSM sound selected
+        preset.sound.file = wt.frame.right.configPanelContent.soundDropDown.selectedPath or nil
+    end
+    
+    -- Get sound channel
+    preset.sound.channel = wt.frame.right.configPanelContent.soundChannelDropDown.selectedValue or "MASTER"
     
     -- Clear temporary coordinates after saving
     if wt.tempCoordinates then
@@ -1682,8 +2210,8 @@ function wt:OnAddTextureClick()
         end
     end
     
-    -- Re-register events if advanced conditions changed
-    if preset.advancedEnabled then
+    -- Re-register events if advanced conditions changed AND preset is enabled
+    if preset.advancedEnabled and preset.enabled then
         wt:RegisterPresetEvents(wt.selectedPreset)
     else
         wt:DeRegisterPresetEvents(wt.selectedPreset)
@@ -1703,6 +2231,11 @@ function wt:OnAddTextureClick()
         wt:HideTextureFrame(wt.selectedPreset)
     -- Otherwise check regular conditions and show if met
     elseif wt:PresetMatchesConditions(wt.selectedPreset) then
+        -- If type changed from motion to static, hide first to stop animation
+        if oldPresetType == "motion" and presetType == "static" then
+            wt:HideTextureFrame(wt.selectedPreset)
+        end
+        
         if preset.type and preset.type == "motion" then
             wt:PlayStopMotion(wt.selectedPreset, preset.textures[1].anchor, preset.textures[1].texture, 
                 preset.textures[1].width, preset.textures[1].height, preset.textures[1].x, preset.textures[1].y, 
@@ -1745,7 +2278,7 @@ function wt:OnLockOrUnlockTextureToDrag()
     if not wt.selectedPreset then return end
     
     local container = wt.activeFramesByPreset[wt.selectedPreset]
-    local btn = wt.frame.right.configPanel.unlockFrameBtn
+    local btn = wt.frame.right.unlockFrameBtn
     
     -- If no frame exists, create it first
     if not container or not container.frame then
@@ -1767,8 +2300,46 @@ function wt:OnLockOrUnlockTextureToDrag()
     local f = container.frame
     
     -- Apply current scale from editbox (even if not saved yet)
-    local currentScale = tonumber(wt.frame.right.configPanel.scaleEdit:GetText()) or 1
+    local currentScale = tonumber(wt.frame.right.configPanelContent.scaleEdit:GetText()) or 1
     f:SetScale(currentScale)
+    
+    -- Apply current text settings from UI (even if not saved yet)
+    if f.fontString or (wt.frame.right.configPanelContent.textContentEdit:GetText() ~= "") then
+        -- Create fontString if it doesn't exist yet
+        if not f.fontString then
+            f.fontString = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        end
+        
+        -- Apply text color from color picker
+        local tr, tg, tb, ta = wt.frame.right.configPanelContent.textColorPicker:GetColor()
+        f.fontString:SetTextColor(tr, tg, tb, ta)
+        
+        -- Apply font settings
+        local fontName = wt.frame.right.configPanelContent.fontDropDown.selectedValue or "Friz Quadrata TT"
+        local fontSize = tonumber(wt.frame.right.configPanelContent.fontSizeEdit:GetText()) or 48
+        local fontOutline = wt.frame.right.configPanelContent.fontOutlineDropDown.selectedValue or "OUTLINE"
+        
+        -- Fetch font path from LSM
+        local fontPath = wt.LSM:Fetch("font", fontName) or "Fonts\\FRIZQT__.TTF"
+        f.fontString:SetFont(fontPath, fontSize, fontOutline)
+        
+        -- Apply text offset
+        local textOffsetX = tonumber(wt.frame.right.configPanelContent.textOffsetXEdit:GetText()) or 0
+        local textOffsetY = tonumber(wt.frame.right.configPanelContent.textOffsetYEdit:GetText()) or 125
+        f.fontString:ClearAllPoints()
+        f.fontString:SetPoint("CENTER", f, "CENTER", textOffsetX, textOffsetY)
+        
+        -- Apply text content
+        local textContent = wt.frame.right.configPanelContent.textContentEdit:GetText()
+        f.fontString:SetText(textContent or "")
+        f.fontString:Show()
+    end
+    
+    -- Apply current texture color (vertex color) from UI
+    if f.texture then
+        local r, g, b, a = wt.frame.right.configPanelContent.textureColorPicker:GetColor()
+        f.texture:SetVertexColor(r, g, b, a)
+    end
     
     -- Check current state
     if container.isLocked == false then
@@ -1895,8 +2466,8 @@ function wt:OnLockOrUnlockTextureToDrag()
             wt.tempCoordinates[wt.selectedPreset].y = wt.tempCoordinates[wt.selectedPreset].y + yDelta
             
             -- Update UI fields
-            wt.frame.right.configPanel.xOffsetEdit:SetText(tostring(wt.tempCoordinates[wt.selectedPreset].x))
-            wt.frame.right.configPanel.yOffsetEdit:SetText(tostring(wt.tempCoordinates[wt.selectedPreset].y))
+            wt.frame.right.configPanelContent.xOffsetEdit:SetText(tostring(wt.tempCoordinates[wt.selectedPreset].x))
+            wt.frame.right.configPanelContent.yOffsetEdit:SetText(tostring(wt.tempCoordinates[wt.selectedPreset].y))
             
             -- Reposition frame
             f:ClearAllPoints()
@@ -2035,8 +2606,8 @@ function wt:OnLockOrUnlockTextureToDrag()
                     newW = math.floor(newW + (newW >= 0 and 0.5 or -0.5))
                     newH = math.floor(newH + (newH >= 0 and 0.5 or -0.5))
                     
-                    wt.frame.right.configPanel.widthEdit:SetText(tostring(newW))
-                    wt.frame.right.configPanel.heightEdit:SetText(tostring(newH))
+                    wt.frame.right.configPanelContent.widthEdit:SetText(tostring(newW))
+                    wt.frame.right.configPanelContent.heightEdit:SetText(tostring(newH))
                     
                     -- Store in temp size table with sign
                     wt.tempSizes = wt.tempSizes or {}
@@ -2162,7 +2733,7 @@ function wt:OnLockOrUnlockTextureToDrag()
                     -- Round to integer
                     newAngle = math.floor(newAngle + 0.5)
                     
-                    wt.frame.right.configPanel.angleEdit:SetText(tostring(newAngle))
+                    wt.frame.right.configPanelContent.angleEdit:SetText(tostring(newAngle))
                     
                     -- Store in temp angle table
                     wt.tempAngles = wt.tempAngles or {}
@@ -2214,7 +2785,7 @@ function wt:OnLockOrUnlockTextureToDrag()
                                 currentY = preset.textures[1].y or 0
                             end
                         end
-                        f.sizeDisplay:SetText(string.format("%d x %d | X: %d, Y: %d | %d°", math.floor(w + 0.5), math.floor(h + 0.5), math.floor(currentX + 0.5), math.floor(currentY + 0.5), math.floor(displayAngle + 0.5)))
+                        f.sizeDisplay:SetText(string.format("%d x %d | X: %d, Y: %d | %d�", math.floor(w + 0.5), math.floor(h + 0.5), math.floor(currentX + 0.5), math.floor(currentY + 0.5), math.floor(displayAngle + 0.5)))
                     end
                 end
             end)
@@ -2298,8 +2869,8 @@ function wt:OnLockOrUnlockTextureToDrag()
             }
             
             -- Update UI fields with temporary values
-            wt.frame.right.configPanel.xOffsetEdit:SetText(tostring(wt.tempCoordinates[wt.selectedPreset].x))
-            wt.frame.right.configPanel.yOffsetEdit:SetText(tostring(wt.tempCoordinates[wt.selectedPreset].y))
+            wt.frame.right.configPanelContent.xOffsetEdit:SetText(tostring(wt.tempCoordinates[wt.selectedPreset].x))
+            wt.frame.right.configPanelContent.yOffsetEdit:SetText(tostring(wt.tempCoordinates[wt.selectedPreset].y))
             
             -- Reposition to exact offset using temporary coordinates (snap to pixel)
             self:ClearAllPoints()
@@ -2635,6 +3206,11 @@ function wt:InitializeTreeElement(button, node)
             button.enableButton:Hide()
         end
         
+        -- Hide selected highlight if exists (only used for presets)
+        if button.selectedHighlight then
+            button.selectedHighlight:Hide()
+        end
+        
         -- Hide drop highlight if exists (clear from previous use)
         if button.dropHighlight then
             button.dropHighlight:Hide()
@@ -2687,11 +3263,19 @@ function wt:InitializeTreeElement(button, node)
                         preset.previousGroup = preset.group
                         preset.group = "Disabled"
                         wt:HideTextureFrame(presetName)
+                        
+                        -- Deregister events when disabling
+                        wt:DeRegisterPresetEvents(presetName)
                     else
                         -- Enabling: restore previous group
                         preset.group = preset.previousGroup
                         preset.previousGroup = preset.group
                         wt:ApplyPreset(presetName)
+                        
+                        -- Re-register events when enabling (if advanced conditions are active)
+                        if preset.advancedEnabled then
+                            wt:RegisterPresetEvents(presetName)
+                        end
                     end
                     
                     -- Refresh will update icon automatically
@@ -2852,6 +3436,19 @@ function wt:InitializeTreeElement(button, node)
             button.dropHighlight:Hide()
         end
         
+        -- Create and show/hide selected highlight
+        if not button.selectedHighlight then
+            button.selectedHighlight = button:CreateTexture(nil, "OVERLAY")
+            button.selectedHighlight:SetAllPoints()
+            button.selectedHighlight:SetColorTexture(0, 0.6, 0, 0.25)  -- Dark green overlay
+        end
+        
+        if data.selected then
+            button.selectedHighlight:Show()
+        else
+            button.selectedHighlight:Hide()
+        end
+        
         -- Create eye button
         if not button.eye then
             button.eye = CreateFrame("Button", nil, button)
@@ -2875,6 +3472,11 @@ end
 ---Update line numbers in trigger editor, optionally highlighting error lines
 ---@param errorLines number|number[]|nil
 function wt:UpdateTriggerLineNumbers(errorLines)
+    -- Check if UI is loaded
+    if not wt.frame or not wt.frame.right or not wt.frame.right.advancedPanel then
+        return
+    end
+    
     local editbox = wt.frame.right.advancedPanel.triggerEdit
     local linebox = wt.frame.right.advancedPanel.lineNumEditBox
     local linetest = wt.frame.right.advancedPanel.lineTestText

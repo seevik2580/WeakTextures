@@ -113,6 +113,24 @@ These fields appear only when **Type** is set to "Stop Motion":
 - **Total Frames**: Total animation frames to play
 - **FPS**: Animation playback speed 
 
+### Text Settings
+Configure default text appearance for this preset. These settings serve as **fallback values** for `CreateInstance()` calls:
+- **Text Content**: Default text to display (can be empty for dynamic text)
+- **Font**: Font family (supports LibSharedMedia fonts)
+- **Font Size**: Text size in pixels
+- **Font Outline**: "OUTLINE", "THICKOUTLINE", or "MONOCHROME"
+- **Text Color**: RGBA color picker
+- **Text Offset X/Y**: Position relative to texture center
+
+**Note:** When using Advanced Triggers with `CreateInstance()`, these values are automatically used unless you override them. This allows you to configure styling in UI and keep Lua code minimal!
+
+### Sound Settings
+Configure default sound for this preset:
+- **Sound**: Sound file or LibSharedMedia sound name (choose "None" for no sound)
+- **Sound Channel**: "Master", "SFX", "Music", "Ambience", "Dialog"
+
+**Note:** Default sound plays when preset is shown. In `CreateInstance()`, you can override with different sounds or use timeline to play sounds at specific times.
+
 ### Position Lock/Unlock
 - **Unlock position**: Enable interactive positioning
   - Drag texture to move
@@ -238,28 +256,230 @@ function(e)
 end
 ```
 
+### UI Default Settings
+
+Before diving into CreateInstance parameters, it's important to understand that **you can configure default values in the UI**:
+
+**Display Settings Tab:**
+1. **Text Settings** section in UI allows you to set:
+   - **Default Font**: Font family (e.g., "Friz Quadrata TT")
+   - **Default Font Size**: Text size in pixels
+   - **Default Font Outline**: "OUTLINE", "THICKOUTLINE", or "MONOCHROME"
+   - **Default Text Color**: RGBA color picker
+   - **Default Text Offset X/Y**: Text positioning relative to frame center
+   - **Default Text Content**: Static text to display (can be overridden per instance)
+
+2. **Sound Settings** section in UI allows you to set:
+   - **Default Sound**: Sound file or LSM sound name
+   - **Default Sound Channel**: "Master", "SFX", "Music", etc.
+
+**How UI Defaults Work:**
+- These settings serve as **fallback values** for all instances of this preset
+- If you don't specify a parameter in `CreateInstance()`, the UI default is used
+- If you don't specify a parameter in timeline `update`, the CreateInstance value (or UI default) is used
+- This means you can set font, color, and offset once in UI, then only override when needed
+
+**Example:**
+```lua
+-- UI Settings: Font="Friz Quadrata TT", Size=24, Color=Red, OffsetY=100
+
+-- This instance uses ALL UI defaults (font, size, color, offset)
+WeakTexturesAPI:CreateInstance({
+    text = "Using UI defaults"
+})
+
+-- This instance overrides only color, keeps UI font/size/offset
+WeakTexturesAPI:CreateInstance({
+    text = "Custom color",
+    textColor = {r=0, g=1, b=0, a=1}  -- Green instead of UI red
+})
+
+-- Timeline: Changes text but keeps ALL other UI defaults
+WeakTexturesAPI:CreateInstance({
+    timeline = {
+        {delay = 1, update = {text = "Step 1"}},  -- UI font/size/color/offset
+        {delay = 2, update = {text = "Step 2"}},  -- Still UI defaults
+        {delay = 3, destroy = true}
+    }
+})
+```
+
+### How CreateInstance Works
+
+When you call `CreateInstance()`, the parameters you provide become **default values for the entire instance lifetime**:
+
+1. **Initial Creation**: Frame is created with your specified parameters
+2. **Timeline Events**: Only update the specific parameters you mention in each event
+3. **Other Parameters**: Remain at their default values from CreateInstance (or preset defaults if not specified)
+
+**Example:**
+```lua
+WeakTexturesAPI:CreateInstance({
+    alpha = 0,      -- Start invisible
+    fontSize = 24,  -- This fontSize applies to ALL timeline events unless overridden
+    timeline = {
+        {delay = 0.5, update = {alpha = 1}},              -- Fade in, fontSize stays 24
+        {delay = 2.0, update = {text = "Hello"}},         -- Change text, fontSize still 24
+        {delay = 3.0, update = {fontSize = 48}},          -- NOW fontSize changes to 48
+        {delay = 5.0, destroy = true}
+    }
+})
+```
+
+**Important:** Timeline events do NOT restart animations! This makes timeline perfect for stop-motion animations where you want to change other properties (text, position, alpha) while animation continues to play.
+
 ### CreateInstance Parameters
 
 ```lua
 WeakTexturesAPI:CreateInstance({
-    text = "...",
-    offsetX = 100,
-    offsetY = 100,
-    scale = 1.0,
-    alpha = 1.0,
-    font = "Friz Quadrata TT",  -- LSM font name OR "Interface\\...\\font.ttf" 
-    fontSize = 12,
-    fontOutline = "OUTLINE",  -- "", "OUTLINE", "THICKOUTLINE", "MONOCHROME"
-    textColor = {r, g, b, a},
-    textOffsetX = 0,
-    textOffsetY = 0,
-    textLeftPoint = "LEFT",
-    textRightPoint = "RIGHT",
+    -- Display properties
+    width = 500,              -- Texture width in pixels
+    height = 500,             -- Texture height in pixels
+    anchor = "UIParent",      -- Parent frame name
+    x = 0,                    -- Base position X (relative to anchor center)
+    y = 100,                  -- Base position Y (relative to anchor center)
+    offsetX = 50,             -- Additional offset X
+    offsetY = -20,            -- Additional offset Y
+    scale = 1.5,              -- Size multiplier
+    angle = 45,               -- Rotation in degrees (0-360)
+    alpha = 1.0,              -- Transparency (0.0-1.0)
+    
+    -- Texture settings
     texture = "WT_semaphor-red",  -- LSM texture name OR "Interface\\...\\texture.tga"
-    sound = "BigWigs: Alarm",  -- LSM sound name OR "Interface\\...\\sound.ogg"
-    soundChannel = "Master"
+    color = {r=1, g=0.5, b=0.5, a=1},  -- Vertex color (tints the entire texture)
+    type = "static"           -- or motion! you can change it on the fly
+    
+    -- Layering
+    strata = "HIGH",          -- "BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG", "FULLSCREEN", "FULLSCREEN_DIALOG", "TOOLTIP"
+    frameLevel = 200,         -- Fine-tune layer within strata (0-999)
+    
+    -- Stop Motion animation (only for presets with type="motion")
+    columns = 8,              -- Number of columns in sprite sheet
+    rows = 4,                 -- Number of rows in sprite sheet
+    totalFrames = 32,         -- Total animation frames to play
+    fps = 24,                 -- Animation speed (frames per second)
+    
+    -- Text overlay
+    text = "Hello",
+    font = "Friz Quadrata TT",        -- LSM font name OR "Interface\\...\\font.ttf"
+    fontSize = 24,
+    fontOutline = "OUTLINE",          -- "", "OUTLINE", "THICKOUTLINE", "MONOCHROME"
+    textColor = {r=1, g=1, b=1, a=1},
+    textOffsetX = 0,
+    textOffsetY = 50,
+    textLeftPoint = "CENTER",         -- Anchor point on text
+    textRightPoint = "CENTER",        -- Anchor point on frame
+    
+    -- Sound
+    sound = "BigWigs: Alarm",         -- LSM sound name OR "Interface\\...\\sound.ogg"
+    soundChannel = "Master",          -- "Master", "SFX", "Music", "Ambience", "Dialog"
+    
+    -- Timeline: Array of events that update parameters over time
+    -- Each event fires at absolute time from CreateInstance call (not relative to previous event)
+    -- Only updates specified parameters - others remain at their default values
+    -- Does NOT restart animations - perfect for stop-motion!
+    timeline = {
+        {delay = 0.5, update = {alpha = 1}},  -- After 0.5s, fade in
+        {delay = 2.0, update = {text = "New text", angle = 60, scale = 1.5}},  -- After 2s, change multiple params
+        {delay = 5.0, update = {alpha = 0}},  -- After 5s, fade out
+        {delay = 5.5, destroy = true}  -- After 5.5s, destroy instance
+    }
 })
 ```
+
+**Timeline Events:**
+Each timeline event can have:
+- `delay` (number): Time in seconds from CreateInstance call when this event fires (absolute time, not relative!)
+- `update` (table): Parameters to update (any parameter from CreateInstance)
+- `destroy` (boolean): If true, destroys the instance immediately
+
+**Timeline Features:**
+- **Absolute Timing**: All delays are measured from CreateInstance call, not from previous event
+- **Partial Updates**: Only updates parameters you specify - others keep their default values
+- **No Animation Restart**: Changing parameters doesn't restart stop-motion animations
+- **Destroy Precedence**: If timeline contains destroy event, preset's Duration auto-hide is ignored
+- **Automatic Cleanup**: All timeline timers are canceled if instance is destroyed early
+
+**Minimal Example - Timeline Only:**
+```lua
+-- Parameters from CreateInstance become defaults for ALL timeline events
+WeakTexturesAPI:CreateInstance({
+    fontSize = 24,     -- This fontSize applies to ALL timeline events below
+    fontOutline = "THICKOUTLINE",  -- This too!
+    timeline = {
+        {delay = 0, update = {alpha = 0, texture = "Interface\\Icons\\inv_misc_questionmark"}},  -- Start invisible, fontSize = 24
+        {delay = 0.5, update = {alpha = 1, text = "Hello!"}},  -- Fade in with text, fontSize still 24
+        {delay = 2.0, update = {angle = 180, fontSize = 48}},  -- Rotate AND change fontSize to 48
+        {delay = 3.0, destroy = true}  -- Destroy instance (ignores preset Duration)
+    }
+})
+```
+
+**All parameters are optional!** If you don't specify a parameter in CreateInstance:
+1. **Text Parameters** (font, fontSize, fontOutline, textColor, textOffsetX/Y, text content): Use values from **Display Settings → Text Settings** in UI
+2. **Sound Parameters** (sound, soundChannel): Use values from **Display Settings → Sound Settings** in UI
+3. **Other Parameters** (width, height, alpha, scale, etc.): Use preset's default values from **Display Settings**
+
+This means you can configure most styling in the UI and keep your Lua code minimal!
+
+**Timeline Example - Smooth Fade:**
+```lua
+-- UI Settings: Font="PT Sans Narrow Bold", Size=30, Color=Cyan, Outline="THICKOUTLINE"
+-- All timeline events will use these UI defaults unless overridden!
+
+-- Helper function to generate fade events
+local function fade(startDelay, duration, fromAlpha, toAlpha, steps)
+    local events = {}
+    local alphaStep = (toAlpha - fromAlpha) / steps
+    local timeStep = duration / steps
+    
+    for i = 1, steps do
+        local delay = startDelay + timeStep * i
+        local alpha = fromAlpha + alphaStep * i
+        table.insert(events, {delay = delay, update = {alpha = alpha}})
+    end
+    
+    return events
+end
+
+-- Build timeline with smooth fade in and fade out
+local timeline = {}
+
+-- Fade in: 0 to 1 over 0.5s in 10 steps (UI font/color/size apply to all)
+for _, event in ipairs(fade(0, 0.5, 0, 1, 10)) do
+    table.insert(timeline, event)
+end
+
+-- Text change - UI font/color/size/outline still apply
+table.insert(timeline, {delay = 3, update = {text = "Middle"}})
+
+-- Override just fontSize for this event - UI font/color/outline still apply
+table.insert(timeline, {delay = 4, update = {fontSize = 48}})
+
+-- Fade out: 1 to 0 over 0.4s in 5 steps, starting at 5s
+for _, event in ipairs(fade(5, 0.4, 1, 0, 5)) do
+    table.insert(timeline, event)
+end
+
+-- Destroy - this prevents Duration auto-hide timer from running
+table.insert(timeline, {delay = 5.5, destroy = true})
+
+WeakTexturesAPI:CreateInstance({
+    alpha = 0,           -- Initial alpha
+    text = "Starting",   -- Initial text (uses UI font/color/size/offset)
+    timeline = timeline
+})
+```
+
+**Key Point:** Notice how we don't specify `font`, `fontSize`, `fontOutline`, `textColor`, or `textOffsetX/Y` in CreateInstance - they all come from UI Settings! Only `alpha` and `text` are specified.
+
+**Why Timeline is Better:**
+- **Cleaner Code**: One CreateInstance call instead of multiple C_Timer.NewTimer
+- **Easier to Read**: Timeline array clearly shows all events and their timing
+- **No Animation Restart**: Texture/parameter updates don't interrupt stop-motion animations
+- **Automatic Cleanup**: Timeline timers are automatically canceled if instance is destroyed early
+- **Better Performance**: All events scheduled at once, not created in callbacks
+- **Destroy Precedence**: Timeline destroy event prevents preset Duration auto-hide from running
 
 **LibSharedMedia (LSM) Support:**
 - If parameter contains `/` or `\\` = treated as full path
@@ -269,10 +489,10 @@ WeakTexturesAPI:CreateInstance({
 
 ### Multi-Instance Advanced Trigger Example - Notification System
 
-**Note:** Due to Blizzard's AddOns restrictions (secrets), most combat-related values (health, damage, cooldowns) cannot be tracked by addons. Use non-combat related events and values instead.  Chat events may have restrictions in instances depending on Blizzard's policies.
+**Note:** Due to Blizzard's AddOns restrictions (secrets), most combat-related values (health, damage, cooldowns) cannot be tracked by addons. Use non-combat related events and values instead. Chat events may have restrictions in instances depending on Blizzard's policies.
 
 **Events to use:** `CHAT_MSG_WHISPER, CHAT_MSG_BN_WHISPER`
-**Duration:** 1
+**Duration:** 3 (auto-hide after 3 seconds if no timeline destroy event)
 ```lua
 function(e, ...)
     if e == "CHAT_MSG_WHISPER" then
@@ -282,8 +502,11 @@ function(e, ...)
                 text = "Requested PI from\n" .. sender,
                 texture = "Interface\\ICONS\\spell_holy_powerinfusion",
                 offsetY = 200,
-                textColor = {1, 0.5, 1, 1},
-                sound = "BigWigs: Alarm"  -- LSM sound from BigWigs addon
+                textColor = {r=1, g=0.5, b=1, a=1},
+                sound = "BigWigs: Alarm",  -- LSM sound from BigWigs addon played on show
+                timeline = {
+                    {delay = 2, update = {text = "!PLEASE!", sound = "BigWigs: Raid Warning"}}, -- Text change and LSM sound from BigWigs addon played 2 seconds after first sound
+                }
             })
         end
     end
@@ -293,6 +516,9 @@ end
 **Note:** `WeakTexturesAPI:CreateInstance()` works in both single-instance and multi-instance modes:
 - **Single-instance**: Reconfigures the existing frame with new properties
 - **Multi-instance**: Creates a new separate frame instance
+
+**Timeline in Multi-Instance:**
+Each instance has its own independent timeline. Multiple instances can run simultaneously with different timelines.
 
 ### Single-Instance Advanced Trigger Example - Level Up Notification
 
@@ -332,7 +558,6 @@ function(e)
     local classification = UnitClassification("target")
     local texturePath = targetType[classification] or targetType["normal"]
     
-    -- Change texture using CreateInstance in single-instance mode
     WeakTexturesAPI:CreateInstance({
         texture = texturePath
     })
@@ -341,87 +566,86 @@ function(e)
 end
 ```
 
-### Single Instance Advanced Trigger Example - Dynamic Texture Based on Pull Timer
+### Single Instance Advanced Trigger Example - Pull Timer with Timeline
 
 **Event to use:** `START_PLAYER_COUNTDOWN`
+**Duration:** 0 (timeline handles cleanup with destroy event)
+**UI Settings:** Font="Friz Quadrata TT", Size=24, Color=Red, Outline="THICKOUTLINE", Alpha=0, OffsetX=60
+
 ```lua
 function(e, ...)
-    local _, duration = ...
-    if duration == nil then
-        duration = 10
-    end
-    
-    local prefix = "Interface\\AddOns\\WeakTextures\\Media\\"
-    
-    -- Default for all CreateInstance
-    local defaultConfig = {
-        textOffsetX = 50,
-        font = "Friz Quadrata TT",  -- LSM font name
-        fontSize = 20,
-        fontOutline = "THICKOUTLINE",
-        textColor = {r=1, g=1, b=1, a=1},
-        soundChannel = "MASTER"
+  local _, duration = ...
+  local prefix = "Interface\\AddOns\\WeakTextures\\Media\\"
+  local media = {
+    textures = {
+      [3] = prefix .. "Textures\\semaphor-red.png",
+      [2] = prefix .. "Textures\\semaphor-yellow.png",
+      [1] = prefix .. "Textures\\semaphor-yellow.png",
+      [0] = prefix .. "Textures\\semaphor-green.png",
+    },
+    sounds = {
+      [3] = prefix .. "Sounds\\3.ogg",
+      [2] = prefix .. "Sounds\\2.ogg",
+      [1] = prefix .. "Sounds\\1.ogg"
     }
-    
-    local media = {
-        textures = {
-        [3] = prefix .. "Textures\\semaphor-red.png",
-        [2] = prefix .. "Textures\\semaphor-yellow.png",
-        [1] = prefix .. "Textures\\semaphor-yellow.png",
-        [0] = prefix .. "Textures\\semaphor-green.png",
-        },
-        sounds = {
-        [3] = prefix .. "Sounds\\3.ogg",
-        [2] = prefix .. "Sounds\\2.ogg",
-        [1] = prefix .. "Sounds\\1.ogg"
+  }
+  
+  -- Build timeline for countdown
+  local timeline = {}
+  
+  -- Countdown events: 3, 2, 1
+  for i = 3, 1, -1 do
+    table.insert(timeline, {
+        delay = duration - i,
+        update = {
+          alpha = 1,  -- Fade in when countdown starts
+          texture = media.textures[i],
+          text = tostring(i),
+          sound = media.sounds[i],
         }
-    }
-    
-    local function config(overrides)
-        local result = {}
-        -- Copy default
-        for k, v in pairs(defaultConfig) do
-        result[k] = v
-        end
-        -- Rewrite values
-        if overrides then
-        for k, v in pairs(overrides) do
-            result[k] = v
-        end
-        end
-        return result
-    end
-    
-    -- Countdown 3, 2, 1
-    for i = 3, 1, -1 do
-        C_Timer.After(duration - i, function()
-            WeakTexturesAPI:CreateInstance(config({
-                texture = media.textures[i],
-                text = tostring(i),
-                sound = media.sounds[i]
-            }))
-            WeakTexturesAPI:RefreshPreset(true) -- true will show changed parameters
-        end)
-    end
-    
-    -- When countdown expires
-    C_Timer.After(duration, function()
-        WeakTexturesAPI:CreateInstance(config({
-                texture = media.textures[0],
-                text = "GO!",
-                fontSize = 50,  -- Override default
-                textOffsetX=100, -- Override default
-                textColor = {r=0, g=1, b=0, a=1}  -- Override default
-        }))
-        WeakTexturesAPI:RefreshPreset(true) -- true will show changed parameters
-    end)
-    
-    -- Hide preset 1 second after countdown ends
-    C_Timer.After(duration + 1, function()
-        WeakTexturesAPI:RefreshPreset(false) -- false will hide preset
-    end)  
+    })
+  end
+  
+  -- "GO!" event when countdown expires
+  table.insert(timeline, {
+      delay = duration,
+      update = {
+        texture = media.textures[0],
+        text = "GO!",
+        fontSize = 50,
+        textOffsetX = 100,
+        textColor = {r=0, g=1, b=0, a=1},
+      }
+  })
+  
+  -- Hide 1 second after countdown ends
+  table.insert(timeline, {
+      delay = duration + 1,
+      destroy = true
+  })
+  
+  -- Create instance with timeline - START INVISIBLE because we set alpha 0 in UI
+  WeakTexturesAPI:CreateInstance({
+      timeline = timeline
+  })
+  
+  WeakTexturesAPI:RefreshPreset(true) -- in single instance mode you have to refresh preset with new instance config
 end
 ```
+
+**Key Improvements with UI Defaults:**
+- **Less Code**: No need to specify font, fontSize, textColor, fontOutline, textOffsetX in CreateInstance
+- **Easier Configuration**: Change font/color/offset in UI without touching Lua code
+- **Timeline Simplicity**: Timeline events only override what changes (texture, text, sound)
+- **Consistent Styling**: All countdown numbers use same UI font/size/color settings
+
+**Why Timeline + UI Defaults is Powerful:**
+- **Minimal Code**: One CreateInstance with just the essentials
+- **UI-Driven Styling**: Configure appearance in UI, not in Lua
+- **Cleaner Timeline**: Only specify what actually changes per event
+- **No Animation Restart**: Texture/parameter updates don't interrupt stop-motion
+- **Automatic Cleanup**: Timeline timers canceled if destroyed early
+- **Destroy Precedence**: Timeline destroy prevents Duration auto-hide
 
 ---
 
@@ -494,12 +718,19 @@ WeakTexturesAPI:CreateInstance({
 Show or hide preset based on boolean (use inside triggers). Good example is Pull timer where you want to dynamicaly change texture with countdown.
 
 ```lua
+
+**Note:** With timeline system, you rarely need RefreshPreset anymore, yet you will still need it for single-instance refresh or initializing new CreateInstance config, then Timeline handles showing/hiding automatically with destroy events. in Multi-instance mode you dont need to call it.
+
+```lua
 -- Inside trigger function:
-WeakTexturesAPI:RefreshPreset(true)  -- Show and refresh with new params
-WeakTexturesAPI:RefreshPreset(false) -- Hide
+WeakTexturesAPI:RefreshPreset(true)  -- Apply changes from CreateInstances and Show preset 
+WeakTexturesAPI:RefreshPreset(false) -- Hide preset and cancel all timers
 ```
 
----
+**When to use RefreshPreset:**
+- Simple triggers without timeline
+- Manual show/hide control
+- Canceling timeline early: `WeakTexturesAPI:RefreshPreset(false)` cancels all timeline timers
 
 ## Import & Export
 

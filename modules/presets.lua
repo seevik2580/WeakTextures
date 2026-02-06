@@ -16,7 +16,6 @@ function wt:ApplyPreset(presetName)
     -- Skip ApplyPreset logic for multi-instance presets
     -- They manage their own lifecycle via CreateInstance + duration timers
     if preset.instancePool and preset.instancePool.enabled then
-        wt:Debug("ApplyPreset: Skipping for multi-instance preset", presetName)
         return
     end
     
@@ -94,6 +93,26 @@ function wt:ApplyPreset(presetName)
             data.y
         )
     end
+    
+    -- Play default sound if defined (only for single-frame presets, not instance pool)
+    if preset.sound and preset.sound.file then
+        local soundPath = preset.sound.file
+        local soundChannel = preset.sound.channel or "Master"
+        
+        if type(soundPath) == "number" then
+            -- FileID, use directly
+            PlaySoundFile(soundPath, soundChannel)
+        elseif type(soundPath) == "string" then
+            -- String path or LSM name
+            if not soundPath:find("[/\\]") then
+                local lsmSound = wt.LSM:Fetch("sound", soundPath)
+                if lsmSound then
+                    soundPath = lsmSound
+                end
+            end
+            PlaySoundFile(soundPath, soundChannel)
+        end
+    end
 end
 
 -- Apply all presets that match their conditions
@@ -137,16 +156,16 @@ function wt:LoadPresetIntoFields(presetName)
     -- NO PRESET / EMPTY PRESET
     if not preset or not preset.textures then
         wt:allDefault()
-        wt.frame.right.configPanel.presetNameEdit:SetText(presetName or "")
+        wt.frame.right.configPanelContent.presetNameEdit:SetText(presetName or "")
         
         -- Set group dropdown
         local groupName = preset and preset.group or ""
         if groupName and groupName ~= "" and WeakTexturesDB.groups[groupName] then
-            wt.frame.right.configPanel.groupDropDown.selectedValue = groupName
-            wt.frame.right.configPanel.groupEditBox:Hide()
+            wt.frame.right.configPanelContent.groupDropDown.selectedValue = groupName
+            wt.frame.right.configPanelContent.groupEditBox:Hide()
         else
-            wt.frame.right.configPanel.groupDropDown.selectedValue = ""
-            wt.frame.right.configPanel.groupEditBox:Hide()
+            wt.frame.right.configPanelContent.groupDropDown.selectedValue = ""
+            wt.frame.right.configPanelContent.groupEditBox:Hide()
         end
         
         wt.frame.right.conditionsPanel.enabledCheck:SetChecked(preset and preset.enabled ~= false or true)
@@ -154,7 +173,7 @@ function wt:LoadPresetIntoFields(presetName)
     end
     
     -- PRESET NAME + GROUP
-    wt.frame.right.configPanel.presetNameEdit:SetText(presetName)
+    wt.frame.right.configPanelContent.presetNameEdit:SetText(presetName)
 
     local displayGroup = preset.group
     if preset.group == "Disabled" and preset.originalGroup then
@@ -163,28 +182,28 @@ function wt:LoadPresetIntoFields(presetName)
     
     -- Set group dropdown
     if displayGroup and displayGroup ~= "" and displayGroup ~= "Disabled" and WeakTexturesDB.groups[displayGroup] then
-        wt.frame.right.configPanel.groupDropDown.selectedValue = displayGroup
-        wt.frame.right.configPanel.groupEditBox:Hide()
+        wt.frame.right.configPanelContent.groupDropDown.selectedValue = displayGroup
+        wt.frame.right.configPanelContent.groupEditBox:Hide()
     else
-        wt.frame.right.configPanel.groupDropDown.selectedValue = ""
-        wt.frame.right.configPanel.groupEditBox:Hide()
+        wt.frame.right.configPanelContent.groupDropDown.selectedValue = ""
+        wt.frame.right.configPanelContent.groupEditBox:Hide()
     end
 
     -- TEXTURE DATA
     local data = preset.textures[1]
     if data then
         local anchorValue = data.anchor or "UIParent"
-        wt.frame.right.configPanel.anchorEdit:SetText(anchorValue)
+        wt.frame.right.configPanelContent.anchorEdit:SetText(anchorValue)
         
         -- Set anchor type dropdown based on anchor value
         if anchorValue == "UIParent" or anchorValue == "" then
-            wt.frame.right.configPanel.anchorTypeDropDown.selectedValue = "Screen"
-            wt.frame.right.configPanel.anchorEdit:Hide()
-            wt.frame.right.configPanel.selectFrameBtn:Hide()
+            wt.frame.right.configPanelContent.anchorTypeDropDown.selectedValue = "Screen"
+            wt.frame.right.configPanelContent.anchorEdit:Hide()
+            wt.frame.right.configPanelContent.selectFrameBtn:Hide()
         else
-            wt.frame.right.configPanel.anchorTypeDropDown.selectedValue = "Custom"
-            wt.frame.right.configPanel.anchorEdit:Show()
-            wt.frame.right.configPanel.selectFrameBtn:Show()
+            wt.frame.right.configPanelContent.anchorTypeDropDown.selectedValue = "Custom"
+            wt.frame.right.configPanelContent.anchorEdit:Show()
+            wt.frame.right.configPanelContent.selectFrameBtn:Show()
         end
         
         -- Check if texture is from LSM or WeakTexturesCustomTextures
@@ -196,9 +215,9 @@ function wt:LoadPresetIntoFields(presetName)
             for textureName, customPath in pairs(WeakTexturesCustomTextures) do
                 if customPath == texturePath then
                     local displayName = textureName:gsub("^WT_", "")  -- Remove WT_ prefix for display
-                    wt.frame.right.configPanel.textureDropDown.selectedValue = displayName
-                    wt.frame.right.configPanel.textureDropDown.selectedPath = customPath
-                    wt.frame.right.configPanel.textureCustomEdit:Hide()
+                    wt.frame.right.configPanelContent.textureDropDown.selectedValue = displayName
+                    wt.frame.right.configPanelContent.textureDropDown.selectedPath = customPath
+                    wt.frame.right.configPanelContent.textureCustomEdit:Hide()
                     foundTexture = true
                     break
                 end
@@ -212,9 +231,9 @@ function wt:LoadPresetIntoFields(presetName)
                 for _, textureName in ipairs(textures) do
                     local lsmPath = wt.LSM:Fetch(category, textureName)
                     if lsmPath == texturePath then
-                        wt.frame.right.configPanel.textureDropDown.selectedValue = textureName
-                        wt.frame.right.configPanel.textureDropDown.selectedPath = lsmPath
-                        wt.frame.right.configPanel.textureCustomEdit:Hide()
+                        wt.frame.right.configPanelContent.textureDropDown.selectedValue = textureName
+                        wt.frame.right.configPanelContent.textureDropDown.selectedPath = lsmPath
+                        wt.frame.right.configPanelContent.textureCustomEdit:Hide()
                         foundTexture = true
                         break
                     end
@@ -225,50 +244,153 @@ function wt:LoadPresetIntoFields(presetName)
         
         -- If not found anywhere, use Custom
         if not foundTexture then
-            wt.frame.right.configPanel.textureDropDown.selectedValue = "Custom"
-            wt.frame.right.configPanel.textureDropDown.selectedPath = nil
-            wt.frame.right.configPanel.textureCustomEdit:SetText(texturePath)
-            wt.frame.right.configPanel.textureCustomEdit:Show()
+            wt.frame.right.configPanelContent.textureDropDown.selectedValue = "Custom"
+            wt.frame.right.configPanelContent.textureDropDown.selectedPath = nil
+            wt.frame.right.configPanelContent.textureCustomEdit:SetText(texturePath)
+            wt.frame.right.configPanelContent.textureCustomEdit:Show()
         end
         
-        wt.frame.right.configPanel.widthEdit:SetText(data.width and tostring(data.width) or "")
-        wt.frame.right.configPanel.heightEdit:SetText(data.height and tostring(data.height) or "")
-        wt.frame.right.configPanel.xOffsetEdit:SetText(data.x and tostring(data.x) or "")
-        wt.frame.right.configPanel.yOffsetEdit:SetText(data.y and tostring(data.y) or "")
+        wt.frame.right.configPanelContent.widthEdit:SetText(data.width and tostring(data.width) or "")
+        wt.frame.right.configPanelContent.heightEdit:SetText(data.height and tostring(data.height) or "")
+        wt.frame.right.configPanelContent.xOffsetEdit:SetText(data.x and tostring(data.x) or "")
+        wt.frame.right.configPanelContent.yOffsetEdit:SetText(data.y and tostring(data.y) or "")
     end
-
+    
+    -- TEXT SETTINGS (from preset.text)
+    if preset.text then
+        wt.frame.right.configPanelContent.textContentEdit:SetText(preset.text.content or "")
+        wt.frame.right.configPanelContent.fontDropDown.selectedValue = preset.text.font or "Friz Quadrata TT"
+        wt.frame.right.configPanelContent.fontSizeEdit:SetText(preset.text.size and tostring(preset.text.size) or tostring(wt.TEXT_DEFAULT_SIZE or 48))
+        wt.frame.right.configPanelContent.fontOutlineDropDown.selectedValue = preset.text.outline or wt.TEXT_DEFAULT_OUTLINE or "OUTLINE"
+        
+        if preset.text.color then
+            wt.frame.right.configPanelContent.textColorPicker:SetColor(
+                preset.text.color.r or 1,
+                preset.text.color.g or 0.82,
+                preset.text.color.b or 0,
+                preset.text.color.a or 1
+            )
+        else
+            -- Use defaults from db.lua
+            local defaultColor = wt.TEXT_DEFAULT_COLOR or {r=1, g=0.82, b=0, a=1}
+            wt.frame.right.configPanelContent.textColorPicker:SetColor(defaultColor.r, defaultColor.g, defaultColor.b, defaultColor.a)
+        end
+        
+        wt.frame.right.configPanelContent.textOffsetXEdit:SetText(preset.text.offsetX and tostring(preset.text.offsetX) or tostring(wt.TEXT_DEFAULT_OFFSET_X or 0))
+        wt.frame.right.configPanelContent.textOffsetYEdit:SetText(preset.text.offsetY and tostring(preset.text.offsetY) or tostring(wt.TEXT_DEFAULT_OFFSET_Y or 125))
+    else
+        -- No text settings - use defaults
+        wt.frame.right.configPanelContent.textContentEdit:SetText("")
+        wt.frame.right.configPanelContent.fontDropDown.selectedValue = "Friz Quadrata TT"
+        wt.frame.right.configPanelContent.fontSizeEdit:SetText(tostring(wt.TEXT_DEFAULT_SIZE or 48))
+        wt.frame.right.configPanelContent.fontOutlineDropDown.selectedValue = wt.TEXT_DEFAULT_OUTLINE or "OUTLINE"
+        local defaultColor = wt.TEXT_DEFAULT_COLOR or {r=1, g=0.82, b=0, a=1}
+        wt.frame.right.configPanelContent.textColorPicker:SetColor(defaultColor.r, defaultColor.g, defaultColor.b, defaultColor.a)
+        wt.frame.right.configPanelContent.textOffsetXEdit:SetText(tostring(wt.TEXT_DEFAULT_OFFSET_X or 0))
+        wt.frame.right.configPanelContent.textOffsetYEdit:SetText(tostring(wt.TEXT_DEFAULT_OFFSET_Y or 125))
+    end
+    
+    -- Texture color
+    if preset.color then
+        wt.frame.right.configPanelContent.textureColorPicker:SetColor(
+            preset.color.r or 1,
+            preset.color.g or 1,
+            preset.color.b or 1,
+            preset.color.a or 1
+        )
+    else
+        -- Default white
+        wt.frame.right.configPanelContent.textureColorPicker:SetColor(1, 1, 1, 1)
+    end
+    
+    -- SOUND SETTINGS
+    if preset.sound then
+        -- Check if sound is from LSM or custom
+        local soundPath = preset.sound.file
+        local foundSound = false
+        
+        if not soundPath or soundPath == "" then
+            -- No sound - set to None
+            wt.frame.right.configPanelContent.soundDropDown.selectedValue = "None"
+            wt.frame.right.configPanelContent.soundDropDown.selectedPath = nil
+            wt.frame.right.configPanelContent.soundCustomEdit:SetText("")
+            wt.frame.right.configPanelContent.soundCustomEdit:Hide()
+            foundSound = true
+        elseif type(soundPath) == "number" then
+            -- FileID - use Custom
+            wt.frame.right.configPanelContent.soundDropDown.selectedValue = "Custom"
+            wt.frame.right.configPanelContent.soundDropDown.selectedPath = nil
+            wt.frame.right.configPanelContent.soundCustomEdit:SetText(tostring(soundPath))
+            wt.frame.right.configPanelContent.soundCustomEdit:Show()
+            foundSound = true
+        elseif type(soundPath) == "string" and soundPath ~= "" then
+            -- Check LSM sounds
+            local sounds = wt.LSM:List("sound")
+            for _, soundName in ipairs(sounds) do
+                local lsmPath = wt.LSM:Fetch("sound", soundName)
+                if lsmPath == soundPath then
+                    wt.frame.right.configPanelContent.soundDropDown.selectedValue = soundName
+                    wt.frame.right.configPanelContent.soundDropDown.selectedPath = lsmPath
+                    wt.frame.right.configPanelContent.soundCustomEdit:Hide()
+                    foundSound = true
+                    break
+                end
+            end
+            
+            -- If not found in LSM, use Custom
+            if not foundSound then
+                wt.frame.right.configPanelContent.soundDropDown.selectedValue = "Custom"
+                wt.frame.right.configPanelContent.soundDropDown.selectedPath = nil
+                wt.frame.right.configPanelContent.soundCustomEdit:SetText(soundPath)
+                wt.frame.right.configPanelContent.soundCustomEdit:Show()
+            end
+        end
+        
+        -- Sound channel
+        wt.frame.right.configPanelContent.soundChannelDropDown.selectedValue = preset.sound.channel or "Master"
+    else
+        -- No sound settings - use defaults (None)
+        wt.frame.right.configPanelContent.soundDropDown.selectedValue = "None"
+        wt.frame.right.configPanelContent.soundDropDown.selectedPath = nil
+        wt.frame.right.configPanelContent.soundCustomEdit:SetText("")
+        wt.frame.right.configPanelContent.soundCustomEdit:Hide()
+        wt.frame.right.configPanelContent.soundChannelDropDown.selectedValue = "MASTER"
+    end
+    
+    -- Apply enable/disable state for sound controls based on selectedValue
+    
     -- TYPE
     local presetType = preset.type or "static"
     local typeText = presetType == "motion" and "Stop Motion" or "Static"
-    wt.frame.right.configPanel.ftypeDropDown.selectedValue = typeText
+    wt.frame.right.configPanelContent.ftypeDropDown.selectedValue = typeText
     if presetType == "motion" then
         wt:SetShownMotionFields(true)
-        wt.frame.right.configPanel.columnsEdit:SetText(preset.columns and tostring(preset.columns) or "")
-        wt.frame.right.configPanel.rowsEdit:SetText(preset.rows and tostring(preset.rows) or "")
-        wt.frame.right.configPanel.totalFramesEdit:SetText(preset.totalFrames and tostring(preset.totalFrames) or "")
-        wt.frame.right.configPanel.fpsEdit:SetText(preset.fps and tostring(preset.fps) or "")
+        wt.frame.right.configPanelContent.columnsEdit:SetText(preset.columns and tostring(preset.columns) or "")
+        wt.frame.right.configPanelContent.rowsEdit:SetText(preset.rows and tostring(preset.rows) or "")
+        wt.frame.right.configPanelContent.totalFramesEdit:SetText(preset.totalFrames and tostring(preset.totalFrames) or "")
+        wt.frame.right.configPanelContent.fpsEdit:SetText(preset.fps and tostring(preset.fps) or "")
     else
         wt:SetShownMotionFields(false)
     end
     -- SCALE
-    wt.frame.right.configPanel.scaleEdit:SetText(preset.scale and tostring(preset.scale) or "1.0")
+    wt.frame.right.configPanelContent.scaleEdit:SetText(preset.scale and tostring(preset.scale) or "1.0")
     
     -- ALPHA
-    wt.frame.right.configPanel.alphaEdit:SetText(preset.alpha and tostring(preset.alpha) or "1.0")
+    wt.frame.right.configPanelContent.alphaEdit:SetText(preset.alpha and tostring(preset.alpha) or "1.0")
     
     -- ANGLE
-    wt.frame.right.configPanel.angleEdit:SetText(preset.angle and tostring(preset.angle) or "0")
+    wt.frame.right.configPanelContent.angleEdit:SetText(preset.angle and tostring(preset.angle) or "0")
 
     -- STRATA
     local strata = preset.strata or "MEDIUM"
-    wt.frame.right.configPanel.strataDropDown.selectedValue = strata
+    wt.frame.right.configPanelContent.strataDropDown.selectedValue = strata
 
     -- FRAME LEVEL
-    wt.frame.right.configPanel.frameLevelEdit:SetText(preset.frameLevel and tostring(preset.frameLevel) or "100")
+    wt.frame.right.configPanelContent.frameLevelEdit:SetText(preset.frameLevel and tostring(preset.frameLevel) or "100")
 
     -- Enable unlock button for existing preset
-    wt.frame.right.configPanel.unlockFrameBtn:Enable()
-    wt.frame.right.configPanel.unlockFrameBtn:SetNormalAtlas(wt.buttonNormal)
+    wt.frame.right.unlockFrameBtn:Enable()
+    wt.frame.right.unlockFrameBtn:SetNormalAtlas(wt.buttonNormal)
     
     -- RESET DROPDOWNS FIRST
     wt.frame.right.conditionsPanel.classDropDown.selectedValue = "Any Class"

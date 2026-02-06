@@ -1,7 +1,7 @@
 ## Interface: 120000
 ## Title: WeakTextures
 ## Author: Seva-Drakthul
-## Version: 1.1.0
+## Version: 1.1.1
 ## Notes: Preset-based texture anchoring UI
 ## SavedVariables: WeakTexturesSettings, WeakTexturesProfiles, WeakTexturesCustomTextures
 ## SavedVariablesPerCharacter: WeakTexturesCharacter

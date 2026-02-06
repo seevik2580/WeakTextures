@@ -2,11 +2,16 @@ local _, wt = ...
 
 -- Example preset data structures
 local EXAMPLE_PRESETS = {
-["presets"] = {
+  ["presets"] = {
     ["Example - Advanced - pull timer"] = {
-      ["totalFrames"] = 23,
-      ["scale"] = 1,
-      ["example"] = true,
+      ["color"] = {
+        ["a"] = 1,
+        ["r"] = 1,
+        ["g"] = 1,
+        ["b"] = 1,
+      },
+      ["eventHandles"] = {
+      },
       ["sounds"] = {
       },
       ["advancedEnabled"] = true,
@@ -15,37 +20,15 @@ local EXAMPLE_PRESETS = {
         ["maxInstances"] = 10,
       },
       ["angle"] = 0,
-      ["textures"] = {
-        [1] = {
-          ["y"] = 33,
-          ["x"] = -320,
-          ["anchor"] = "UIParent",
-          ["texture"] = "Interface\\AddOns\\WeakTextures\\Media\\Textures\\semaphor-green.png",
-          ["height"] = 122,
-          ["width"] = 48,
-        },
+      ["sound"] = {
+        ["channel"] = "Master",
       },
+      ["enabled"] = false,
       ["type"] = "static",
-      ["columns"] = 4,
-      ["duration"] = 0,
+      ["frameLevel"] = 100,
       ["trigger"] = "function(e, ...)\
   local _, duration = ...\
-  if duration == nil then\
-    duration = 10\
-  end\
-  \
   local prefix = \"Interface\\\\AddOns\\\\WeakTextures\\\\Media\\\\\"\
-  \
-  -- Default for all CreateInstance\
-  local defaultConfig = {\
-    textOffsetX = 50,\
-    font = \"Friz Quadrata TT\",\
-    fontSize = 20,\
-    fontOutline = \"THICKOUTLINE\",\
-    textColor = {r=1, g=1, b=1, a=1},\
-    soundChannel = \"MASTER\"\
-  }\
-  \
   local media = {\
     textures = {\
       [3] = prefix .. \"Textures\\\\semaphor-red.png\",\
@@ -60,105 +43,107 @@ local EXAMPLE_PRESETS = {
     }\
   }\
   \
-  local function config(overrides)\
-    local result = {}\
-    -- Copy default\
-    for k, v in pairs(defaultConfig) do\
-      result[k] = v\
-    end\
-    -- Rewrite values\
-    if overrides then\
-      for k, v in pairs(overrides) do\
-        result[k] = v\
-      end\
-    end\
-    return result\
-  end\
+  -- Build timeline for countdown\
+  local timeline = {}\
   \
-  -- Countdown 3, 2, 1\
+  -- Countdown events: 3, 2, 1\
   for i = 3, 1, -1 do\
-    C_Timer.After(duration - i, function()\
-        WeakTexturesAPI:CreateInstance(config({\
-              texture = media.textures[i],\
-              text = tostring(i),\
-              sound = media.sounds[i]\
-        }))\
-        WeakTexturesAPI:RefreshPreset(true)\
-    end)\
+    table.insert(timeline, {\
+        delay = duration - i,\
+        update = {\
+          alpha = 1,  -- Fade in when countdown starts\
+          texture = media.textures[i],\
+          text = tostring(i),\
+          sound = media.sounds[i],\
+        }\
+    })\
   end\
   \
-  -- When countdown expires\
-  C_Timer.After(duration, function()\
-      WeakTexturesAPI:CreateInstance(config({\
-            texture = media.textures[0],\
-            text = \"GO!\",\
-            fontSize = 50,  -- Override\
-            textOffsetX=100, -- Override\
-            textColor = {r=0, g=1, b=0, a=1}  -- Override\
-      }))\
-      WeakTexturesAPI:RefreshPreset(true)\
-  end)\
+  -- \"GO!\" event when countdown expires\
+  table.insert(timeline, {\
+      delay = duration,\
+      update = {\
+        texture = media.textures[0],\
+        text = \"GO!\",\
+        fontSize = 50,\
+        textOffsetX = 100,\
+        textColor = {r=0, g=1, b=0, a=1},\
+      }\
+  })\
   \
-  -- Hide preset\
-  C_Timer.After(duration + 1, function()\
-      WeakTexturesAPI:RefreshPreset(false)\
-  end)  \
+  -- Hide 1 second after countdown ends\
+  table.insert(timeline, {\
+      delay = duration + 1,\
+      destroy = true\
+  })\
+  \
+  -- Create instance with timeline - START INVISIBLE\
+  WeakTexturesAPI:CreateInstance({\
+      timeline = timeline\
+  })\
+  \
+  WeakTexturesAPI:RefreshPreset(true)\
 end",
       ["text"] = {
-        ["outline"] = "OUTLINE",
+        ["enabled"] = true,
         ["font"] = "Fonts\\FRIZQT__.TTF",
-        ["offsetX"] = 0,
-        ["enabled"] = false,
+        ["offsetX"] = 60,
+        ["outline"] = "OUTLINE",
         ["color"] = {
           ["a"] = 1,
-          ["b"] = 1,
-          ["g"] = 1,
           ["r"] = 1,
+          ["g"] = 0,
+          ["b"] = 0.039215687662363,
         },
-        ["offsetY"] = 125,
+        ["offsetY"] = 0,
         ["content"] = "",
-        ["size"] = 48,
+        ["size"] = 30,
       },
-      ["alpha"] = 1,
-      ["fps"] = 15,
-      ["eventHandles"] = {
-        [1] = {
-          ["event"] = "START_PLAYER_COUNTDOWN",
-        },
-      },
-      ["rows"] = 6,
-      ["version"] = 2,
-      ["frameLevel"] = 100,
+      ["alpha"] = 0,
+      ["duration"] = 0,
+      ["example"] = true,
+      ["group"] = "Examples/Advanced",
       ["events"] = {
         [1] = "START_PLAYER_COUNTDOWN",
       },
+      ["scale"] = 1,
+      ["version"] = 2,
       ["conditions"] = {
         ["combat"] = false,
         ["zone"] = "",
         ["encounter"] = false,
         ["nothousing"] = false,
         ["notVehicle"] = false,
-        ["notCombat"] = false,
+        ["notRested"] = false,
         ["alive"] = false,
         ["vehicle"] = false,
         ["dead"] = false,
         ["housing"] = false,
-        ["instance"] = false,
+        ["instance"] = true,
         ["notPetBattle"] = false,
         ["notEncounter"] = false,
-        ["playerName"] = "",
+        ["notCombat"] = false,
         ["petBattle"] = false,
         ["notInstance"] = false,
         ["rested"] = false,
-        ["notRested"] = false,
+        ["playerName"] = "",
       },
-      ["enabled"] = false,
-      ["group"] = "Examples/Advanced",
+      ["originalGroup"] = "Examples/Advanced",
+      ["textures"] = {
+        [1] = {
+          ["y"] = 43,
+          ["x"] = -369,
+          ["anchor"] = "UIParent",
+          ["texture"] = "Interface\\AddOns\\WeakTextures\\Media\\Textures\\semaphor-green.png",
+          ["height"] = 179,
+          ["width"] = 72,
+        },
+      },
     },
     ["Example - Static Texture"] = {
-      ["strata"] = "LOW",
-      ["group"] = "Examples/Simple",
-      ["example"] = true,
+      ["strata"] = "HIGH",
+      ["scale"] = 1,
+      ["duration"] = 0,
       ["sounds"] = {
       },
       ["advancedEnabled"] = false,
@@ -167,42 +152,50 @@ end",
         ["maxInstances"] = 10,
       },
       ["angle"] = 0,
-      ["textures"] = {
-        [1] = {
-          ["y"] = 100,
-          ["x"] = 0,
-          ["anchor"] = "UIParent",
-          ["height"] = 64,
-          ["width"] = 64,
-          ["texture"] = "Interface\\AddOns\\WeakTextures\\Media\\Textures\\emoji.tga",
-        },
+      ["sound"] = {
+        ["channel"] = "MASTER",
       },
+      ["enabled"] = false,
       ["type"] = "static",
       ["frameLevel"] = 100,
       ["trigger"] = "",
       ["text"] = {
-        ["enabled"] = false,
-        ["font"] = "Fonts\\FRIZQT__.TTF",
+        ["enabled"] = true,
+        ["font"] = "PT Sans Narrow Bold",
         ["offsetX"] = 0,
         ["outline"] = "OUTLINE",
         ["color"] = {
           ["a"] = 1,
-          ["r"] = 1,
-          ["g"] = 1,
-          ["b"] = 1,
+          ["r"] = 0.090196080505848,
+          ["g"] = 0.678431391716,
+          ["b"] = 0.50196081399918,
         },
-        ["offsetY"] = 125,
-        ["content"] = "",
+        ["offsetY"] = 50,
+        ["content"] = "Hello World",
         ["size"] = 48,
       },
       ["alpha"] = 1,
-      ["eventHandles"] = {
-      },
+      ["group"] = "Examples/Simple",
+      ["example"] = true,
       ["events"] = {
       },
       ["version"] = 2,
-      ["scale"] = 1,
-      ["duration"] = 0,
+      ["textures"] = {
+        [1] = {
+          ["y"] = 0,
+          ["x"] = 0,
+          ["anchor"] = "UIParent",
+          ["texture"] = "Interface\\AddOns\\WeakTextures\\Media\\Textures\\emoji.tga",
+          ["height"] = 81,
+          ["width"] = 81,
+        },
+      },
+      ["color"] = {
+        ["a"] = 1,
+        ["r"] = 0.10588236153126,
+        ["g"] = 1,
+        ["b"] = 0,
+      },
       ["conditions"] = {
         ["combat"] = false,
         ["zone"] = "",
@@ -223,37 +216,45 @@ end",
         ["rested"] = false,
         ["playerName"] = "",
       },
-      ["enabled"] = false,
+      ["originalGroup"] = "Examples/Simple",
+      ["eventHandles"] = {
+      },
     },
     ["Example - Stop Motion"] = {
-      ["strata"] = "LOW",
+      ["strata"] = "DIALOG",
       ["totalFrames"] = 23,
       ["group"] = "Examples/Simple",
       ["example"] = true,
       ["sounds"] = {
       },
+      ["duration"] = 0,
       ["advancedEnabled"] = false,
       ["instancePool"] = {
         ["enabled"] = false,
         ["maxInstances"] = 10,
       },
-      ["angle"] = 146,
+      ["angle"] = 360,
+      ["sound"] = {
+        ["channel"] = "MASTER",
+      },
+      ["columns"] = 4,
       ["textures"] = {
         [1] = {
-          ["y"] = 73,
-          ["x"] = 377,
+          ["y"] = 4,
+          ["x"] = -135,
           ["anchor"] = "UIParent",
           ["texture"] = "Interface\\AddOns\\WeakTextures\\Media\\Textures\\fastercat.tga",
-          ["height"] = 209,
-          ["width"] = 270,
+          ["height"] = 246,
+          ["width"] = 240,
         },
       },
       ["type"] = "motion",
       ["frameLevel"] = 100,
-      ["duration"] = 0,
+      ["eventHandles"] = {
+      },
       ["trigger"] = "",
       ["text"] = {
-        ["enabled"] = false,
+        ["enabled"] = true,
         ["font"] = "Fonts\\FRIZQT__.TTF",
         ["offsetX"] = 0,
         ["outline"] = "OUTLINE",
@@ -269,12 +270,12 @@ end",
       },
       ["alpha"] = 1,
       ["fps"] = 15,
+      ["version"] = 2,
+      ["enabled"] = false,
+      ["events"] = {
+      },
       ["rows"] = 6,
       ["scale"] = 1,
-      ["version"] = 2,
-      ["enabled"] = false,
-      ["events"] = {
-      },
       ["conditions"] = {
         ["combat"] = false,
         ["zone"] = "",
@@ -295,235 +296,60 @@ end",
         ["rested"] = false,
         ["playerName"] = "",
       },
-      ["columns"] = 4,
-      ["eventHandles"] = {
+      ["originalGroup"] = "Examples/Simple",
+      ["color"] = {
+        ["a"] = 1,
+        ["r"] = 1,
+        ["g"] = 0.23529413342476,
+        ["b"] = 0,
       },
-    },
-    ["Example - Advanced - target type"] = {
-      ["example"] = true,
-      ["strata"] = "HIGH",
-      ["scale"] = 1,
-      ["eventHandles"] = {
-        [1] = {
-          ["event"] = "PLAYER_TARGET_CHANGED",
-        },
-      },
-      ["advancedEnabled"] = true,
-      ["angle"] = 0,
-      ["enabled"] = false,
-      ["type"] = "static",
-      ["frameLevel"] = 100,
-      ["trigger"] = "function(e)\
-  if not UnitExists(\"target\") then\
-    return false\
-  end\
-  \
-  local texPrefix = \"Interface\\\\AddOns\\\\UFArtSharedMedia\\\\Media\\\\\"\
-  local targetType = {\
-    [\"elite\"] = texPrefix .. \"Elite\\\\FrameSize80_256x64.png\",\
-    [\"worldboss\"] = texPrefix .. \"Elite\\\\FrameSize80_256x64.png\",\
-    [\"normal\"] = texPrefix .. \"Normal\\\\NoPowerBarSize70_256x64.png\",\
-  }\
-  \
-  local classification = UnitClassification(\"target\")\
-  local texturePath = targetType[classification] or targetType[\"normal\"]\
-  \
-  WeakTexturesAPI:CreateInstance({\
-      texture = texturePath,\
-      text = classification,\
-      textOffsetY = 50,\
-      fontSize = 20,\
-  })\
-  \
-  return true\
-end",
-      ["alpha"] = 1,
-      ["events"] = {
-        [1] = "PLAYER_TARGET_CHANGED",
-      },
-      ["duration"] = 0,
-      ["group"] = "Examples/Advanced",
-      ["conditions"] = {
-        ["combat"] = false,
-        ["zone"] = "",
-        ["encounter"] = false,
-        ["nothousing"] = false,
-        ["notVehicle"] = false,
-        ["notCombat"] = false,
-        ["alive"] = false,
-        ["vehicle"] = false,
-        ["dead"] = false,
-        ["housing"] = false,
-        ["instance"] = false,
-        ["notPetBattle"] = false,
-        ["notEncounter"] = false,
-        ["playerName"] = "",
-        ["petBattle"] = false,
-        ["notInstance"] = false,
-        ["rested"] = false,
-        ["notRested"] = false,
-      },
-      ["textures"] = {
-        [1] = {
-          ["y"] = 0,
-          ["x"] = 0,
-          ["anchor"] = "UUF_Target",
-          ["height"] = 50,
-          ["width"] = 275,
-          ["texture"] = "Interface\\AddOns\\WeakTextures\\Media\\Textures\\emoji.tga",
-        },
-      },
-    },
-    ["Example - Advanced - trade"] = {
-      ["group"] = "Examples/Advanced",
-      ["example"] = true,
-      ["sounds"] = {
-      },
-      ["advancedEnabled"] = true,
-      ["instancePool"] = {
-        ["enabled"] = false,
-        ["maxInstances"] = 10,
-      },
-      ["angle"] = 0,
-      ["enabled"] = false,
-      ["type"] = "static",
-      ["frameLevel"] = 100,
-      ["trigger"] = "function(e)\
-        if e == \"TRADE_SHOW\" then\
-            return true\
-        else\
-            return false\
-        end\
-    end\
-            ",
-      ["text"] = {
-        ["enabled"] = false,
-        ["font"] = "Fonts\\FRIZQT__.TTF",
-        ["offsetX"] = 0,
-        ["outline"] = "OUTLINE",
-        ["color"] = {
-          ["a"] = 1,
-          ["r"] = 1,
-          ["g"] = 1,
-          ["b"] = 1,
-        },
-        ["offsetY"] = 125,
-        ["content"] = "",
-        ["size"] = 48,
-      },
-      ["alpha"] = 1,
-      ["duration"] = 0,
-      ["events"] = {
-        [1] = "TRADE_SHOW",
-        [2] = "TRADE_CLOSED",
-      },
-      ["eventHandles"] = {
-        [1] = {
-          ["event"] = "TRADE_SHOW",
-        },
-        [2] = {
-          ["event"] = "TRADE_CLOSED",
-        },
-      },
-      ["textures"] = {
-        [1] = {
-          ["y"] = -4,
-          ["x"] = 282,
-          ["anchor"] = "TradeFrame",
-          ["texture"] = "Interface\\AddOns\\WeakTextures\\Media\\Textures\\emoji.tga",
-          ["height"] = 198,
-          ["width"] = 197,
-        },
-      },
-      ["conditions"] = {
-        ["combat"] = false,
-        ["zone"] = "",
-        ["encounter"] = false,
-        ["nothousing"] = false,
-        ["notVehicle"] = false,
-        ["notCombat"] = false,
-        ["alive"] = false,
-        ["vehicle"] = false,
-        ["dead"] = false,
-        ["housing"] = false,
-        ["instance"] = false,
-        ["notPetBattle"] = false,
-        ["notEncounter"] = false,
-        ["playerName"] = "",
-        ["petBattle"] = false,
-        ["notInstance"] = false,
-        ["rested"] = false,
-        ["notRested"] = false,
-      },
-      ["version"] = 2,
-      ["scale"] = 1,
     },
     ["Example - Advanced - death alert"] = {
       ["totalFrames"] = 158,
-      ["scale"] = 1,
-      ["example"] = true,
-      ["tempOverrides"] = {
-        ["fontSize"] = 80,
-        ["scale"] = 1.17,
-        ["text"] = "DEAD!",
-        ["alpha"] = 0.9,
-        ["font"] = "Friz Quadrata TT",
-        ["offsetX"] = 78,
-        ["fontOutline"] = "THICKOUTLINE",
-        ["soundChannel"] = "MASTER",
-        ["offsetY"] = 38,
-        ["sound"] = "Interface\\AddOns\\WeakTextures\\Media\\Sounds\\turtlemoan6.ogg",
-        ["textColor"] = {
-          ["a"] = 1,
-          ["b"] = 0.62,
-          ["g"] = 0.63,
-          ["r"] = 0.38,
-        },
+      ["color"] = {
+        ["a"] = 1,
+        ["r"] = 1,
+        ["g"] = 1,
+        ["b"] = 1,
       },
+      ["duration"] = 3,
       ["sounds"] = {
       },
+      ["example"] = true,
       ["advancedEnabled"] = true,
       ["instancePool"] = {
         ["enabled"] = true,
         ["maxInstances"] = 10,
       },
       ["angle"] = 0,
-      ["eventHandles"] = {
-        [1] = {
-          ["event"] = "UNIT_DIED",
-        },
+      ["sound"] = {
+        ["channel"] = "MASTER",
       },
+      ["group"] = "Examples/Advanced",
       ["textures"] = {
         [1] = {
-          ["y"] = 219,
-          ["x"] = -8,
+          ["y"] = 318,
+          ["x"] = 0,
           ["anchor"] = "UIParent",
-          ["height"] = 548,
-          ["width"] = 650,
-          ["texture"] = "Interface\\AddOns\\WeakTextures\\Media\\Textures\\among\\default.tga",
+          ["texture"] = "Interface\\AddOns\\WeakTextures\\Media\\Textures\\default.tga",
+          ["height"] = 502,
+          ["width"] = 513,
         },
       },
       ["type"] = "motion",
-      ["frameLevel"] = 100,
-      ["duration"] = 3,
+      ["columns"] = 14,
+      ["rows"] = 12,
       ["trigger"] = "function(event, ...)\
+  if not event == \"UNIT_DIED\" then return false end\
   local prefix = \"Interface\\\\AddOns\\\\WeakTextures\\\\Media\\\\Sounds\\\\\"\
   local sounds = { \"turtlemoan1.ogg\", \"turtlemoan2.ogg\", \"turtlemoan3.ogg\", \"turtlemoan4.ogg\", \"turtlemoan5.ogg\", \"turtlemoan6.ogg\" }\
   \
   WeakTexturesAPI:CreateInstance({\
-      text = \"DEAD!\",\
+      sound = prefix .. sounds[math.random(1, 6)],\
+      textColor = {r=math.random(0,100)/100, g=math.random(0,100)/100, b=math.random(0,100)/100, a=1},\
       offsetX = math.random(-200, 200),\
       offsetY = math.random(-100, 100),\
-      scale = math.random(80, 150) / 100,\
-      alpha = 0.9,\
-      font = \"Friz Quadrata TT\",\
-      fontSize = 80,\
-      fontOutline = \"THICKOUTLINE\",\
-      textColor = {r=math.random(0,100)/100, g=math.random(0,100)/100, b=math.random(0,100)/100, a=1},\
-      sound = prefix .. sounds[math.random(1, 6)],\
-      soundChannel = \"MASTER\"\
   })\
-  return false\
 end\
 \
 \
@@ -532,28 +358,29 @@ end\
 ",
       ["text"] = {
         ["enabled"] = true,
-        ["font"] = "Fonts\\FRIZQT__.TTF",
-        ["offsetX"] = 0,
+        ["font"] = "PT Sans Narrow Bold",
+        ["offsetX"] = 1,
         ["outline"] = "OUTLINE",
         ["color"] = {
           ["a"] = 1,
-          ["r"] = 1,
-          ["g"] = 1,
+          ["r"] = 0,
+          ["g"] = 0.65490198135376,
           ["b"] = 1,
         },
-        ["offsetY"] = 125,
-        ["content"] = "",
-        ["size"] = 48,
+        ["offsetY"] = 100,
+        ["content"] = "UNIT DEAD!",
+        ["size"] = 50,
       },
       ["alpha"] = 1,
       ["fps"] = 60,
-      ["rows"] = 12,
+      ["frameLevel"] = 100,
+      ["version"] = 2,
       ["events"] = {
         [1] = "UNIT_DIED",
       },
-      ["version"] = 2,
       ["enabled"] = false,
-      ["columns"] = 14,
+      ["eventHandles"] = {
+      },
       ["conditions"] = {
         ["combat"] = false,
         ["zone"] = "",
@@ -574,40 +401,43 @@ end\
         ["rested"] = false,
         ["notCombat"] = false,
       },
-      ["group"] = "Examples/Advanced",
+      ["originalGroup"] = "Examples/Advanced",
+      ["scale"] = 1,
     },
     ["Example - Advanced - new whisper"] = {
-      ["example"] = true,
       ["scale"] = 1,
-      ["eventHandles"] = {
-        [1] = {
-          ["event"] = "CHAT_MSG_WHISPER",
-        },
+      ["duration"] = 3,
+      ["color"] = {
+        ["a"] = 1,
+        ["b"] = 1,
+        ["g"] = 1,
+        ["r"] = 1,
       },
       ["sounds"] = {
       },
+      ["example"] = true,
       ["advancedEnabled"] = true,
       ["instancePool"] = {
         ["enabled"] = true,
         ["maxInstances"] = 10,
       },
       ["angle"] = 0,
+      ["sound"] = {
+        ["channel"] = "MASTER",
+      },
       ["enabled"] = false,
       ["type"] = "static",
       ["frameLevel"] = 100,
       ["trigger"] = "function(e, ...)\
   if e == \"CHAT_MSG_WHISPER\" then\
-    local message, sender = ...\
-    -- Show notification when receiving whisper\
-    if string.find(message, \"pi me\") then\
-      WeakTexturesAPI:CreateInstance({\
-          text = \"Requested PI from\\n\" .. sender,\
-          texture = \"Interface\\\\ICONS\\\\spell_holy_powerinfusion\",\
-          offsetY = 200,\
-          textColor = {1, 0.5, 1, 1},\
-      })\
-    end\
+    WeakTexturesAPI:CreateInstance({\
+        text = \"New whisper\",\
+        timeline = {\
+          {delay = 2, update = {text = \"hahaha\", sound = \"BigWigs: Alarm\"}},\
+        }\
+    })\
   end\
+  WeakTexturesAPI:RefreshPreset(true)\
 end",
       ["text"] = {
         ["enabled"] = true,
@@ -616,27 +446,32 @@ end",
         ["outline"] = "OUTLINE",
         ["color"] = {
           ["a"] = 1,
-          ["r"] = 1,
-          ["g"] = 1,
           ["b"] = 1,
+          ["g"] = 0.66666668653488,
+          ["r"] = 0,
         },
-        ["offsetY"] = 125,
+        ["offsetY"] = 100,
         ["content"] = "",
         ["size"] = 48,
       },
       ["alpha"] = 1,
-      ["version"] = 2,
+      ["eventHandles"] = {
+      },
       ["textures"] = {
         [1] = {
-          ["y"] = 0,
-          ["x"] = 0,
+          ["y"] = 116,
+          ["x"] = -1,
           ["anchor"] = "UIParent",
-          ["width"] = 64,
           ["height"] = 64,
+          ["width"] = 64,
           ["texture"] = "Interface\\AddOns\\WeakTextures\\Media\\Textures\\emoji.tga",
         },
       },
-      ["group"] = "Examples/Advanced",
+      ["events"] = {
+        [1] = "CHAT_MSG_WHISPER",
+        [2] = "CHAT_MSG_BN_WHISPER",
+      },
+      ["version"] = 2,
       ["conditions"] = {
         ["combat"] = false,
         ["zone"] = "",
@@ -650,17 +485,15 @@ end",
         ["housing"] = false,
         ["instance"] = false,
         ["notPetBattle"] = false,
-        ["notEncounter"] = false,
+        ["notEncounter"] = true,
         ["notRested"] = false,
         ["petBattle"] = false,
         ["notInstance"] = false,
         ["rested"] = false,
         ["playerName"] = "",
       },
-      ["events"] = {
-        [1] = "CHAT_MSG_WHISPER",
-      },
-      ["duration"] = 3,
+      ["originalGroup"] = "Examples/Advanced",
+      ["group"] = "Examples/Advanced",
     },
   },
   ["groups"] = {

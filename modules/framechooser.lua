@@ -60,7 +60,7 @@ function wt:StartFrameChooser()
 
         -- Confirm with left click
         if IsMouseButtonDown("LeftButton") and oldFocusName then
-            wt.frame.right.configPanel.anchorEdit:SetText(oldFocusName)
+            wt.frame.right.configPanelContent.anchorEdit:SetText(oldFocusName)
             wt:StopFrameChooser()
             return
         end

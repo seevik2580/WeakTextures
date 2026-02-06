@@ -20,6 +20,13 @@ WeakTexturesSettings = WeakTexturesSettings or {
     firstRun = true,
 }
 
+-- Default text appearance constants (consistent across single & multi-instance modes)
+wt.TEXT_DEFAULT_COLOR = { r = 1, g = 0.82, b = 0, a = 1 }  -- Gold like GameFontNormal
+wt.TEXT_DEFAULT_OUTLINE = "OUTLINE"
+wt.TEXT_DEFAULT_SIZE = 10
+wt.TEXT_DEFAULT_OFFSET_X = 0
+wt.TEXT_DEFAULT_OFFSET_Y = 0
+
 -- Store registered custom textures
 WeakTexturesCustomTextures = WeakTexturesCustomTextures or {}
 

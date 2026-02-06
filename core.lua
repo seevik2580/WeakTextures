@@ -397,12 +397,11 @@ loader:SetScript("OnEvent", function(_, event, ...)
         
         wt.isApplyingFromEvent = true
         
-        -- Use optimized event handling if ADDON_EVENTS table exists for this event
+        -- Only process events that have registered presets in ADDON_EVENTS
         if WeakTexturesDB.ADDON_EVENTS[event] then
             wt:ApplyPresetsForEvent(event)
-        else
-            wt:ApplyAllPresets()
         end
+        -- If event is not in ADDON_EVENTS, do nothing (optimization)
         
         wt.isApplyingFromEvent = false
         

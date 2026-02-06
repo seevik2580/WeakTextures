@@ -79,11 +79,41 @@ L.LABEL_ALPHA = "Alpha"
 L.BUTTON_UNLOCK_POSITION = "Unlock position"
 L.BUTTON_LOCK_POSITION = "Lock position"
 
+-- Sound Settings
+L.HEADER_SOUND_SETTINGS = "Sound Settings"
+L.LABEL_SOUND = "Sound"
+L.PLACEHOLDER_SOUND = "Enter sound path"
+L.LABEL_SOUND_CHANNEL = "Sound Channel"
+L.SOUND_CHANNEL_MASTER = "Master"
+L.SOUND_CHANNEL_SFX = "SFX"
+L.SOUND_CHANNEL_MUSIC = "Music"
+L.SOUND_CHANNEL_AMBIENCE = "Ambience"
+L.SOUND_CHANNEL_DIALOG = "Dialog"
+L.SOUND_NONE = "None"
+L.SOUND_CUSTOM = "Custom"
+L.BUTTON_PREVIEW_SOUND = "Preview Sound"
+
 -- Stop Motion Settings
 L.LABEL_COL = "Col"
 L.LABEL_ROW = "Row"
 L.LABEL_FRAMES = "Frames"
 L.LABEL_FPS = "FPS"
+
+-- Text Settings
+L.HEADER_TEXT_SETTINGS = "Text Settings"
+L.LABEL_TEXT_CONTENT = "Text"
+L.PLACEHOLDER_TEXT_CONTENT = "Enter text to display"
+L.LABEL_FONT = "Font"
+L.LABEL_FONT_SIZE = "Font Size"
+L.LABEL_FONT_OUTLINE = "Outline"
+L.LABEL_TEXT_COLOR = "Text Color"
+L.LABEL_TEXT_OFFSET_X = "Text X"
+L.LABEL_TEXT_OFFSET_Y = "Text Y"
+L.LABEL_TEXTURE_COLOR = "Texture Color"
+L.OUTLINE_NONE = "None"
+L.OUTLINE_NORMAL = "Normal"
+L.OUTLINE_THICK = "Thick"
+L.OUTLINE_MONOCHROME = "Monochrome"
 
 -- Load Conditions
 L.HEADER_LOADING = "Loading"
