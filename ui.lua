@@ -207,6 +207,20 @@ function wt:CreateUI()
     wt.frame.left.profilesDropDown = wt:CreateDropdown(wt.frame.left.settingsBtn, "MTP_ProfilesDropdown", 114, wt:GetActiveProfile(), wt:GetActiveProfile())
     wt.frame.left.profilesDropDown:SetPoint("LEFT", wt.frame.left.settingsBtn, "LEFT", -116, 0)
     wt.frame.left.profilesDropDown:SetupMenu(function(dropdown, rootDescription)
+        -- Clean up sound preview regions from recycled buttons
+        rootDescription:AddInitializer(function(button)
+            if button.soundPreviewRegion then
+                button.soundPreviewRegion:SetScript("OnClick", nil)
+                button.soundPreviewRegion:SetScript("OnEnter", nil)
+                button.soundPreviewRegion:SetScript("OnLeave", nil)
+                button.soundPreviewRegion:EnableMouse(false)
+                button.soundPreviewRegion:Hide()
+                button.soundPreviewRegion:SetParent(nil)
+                button.soundPreviewRegion:ClearAllPoints()
+                button.soundPreviewRegion = nil
+            end
+        end)
+        
         for _, profile in pairs(wt:GetAllProfiles()) do
             rootDescription:CreateRadio(profile, function() return dropdown.selectedValue == profile end, function()
                 dropdown.selectedValue = profile
@@ -1024,16 +1038,35 @@ function wt:CreateUI()
                 previewBtn:SetPoint("RIGHT", -4, 0)
                 previewBtn:SetAtlas("voicechat-icon-speaker")
                 
-                -- Create clickable region
-                if not button.soundPreviewRegion then
-                    button.soundPreviewRegion = CreateFrame("Button", nil, button)
+                -- Clean up old region if it exists
+                if button.soundPreviewRegion then
+                    button.soundPreviewRegion:SetScript("OnClick", nil)
+                    button.soundPreviewRegion:SetScript("OnEnter", nil)
+                    button.soundPreviewRegion:SetScript("OnLeave", nil)
+                    button.soundPreviewRegion:SetScript("OnHide", nil)
+                    button.soundPreviewRegion:EnableMouse(false)
+                    button.soundPreviewRegion:Hide()
+                    button.soundPreviewRegion:SetParent(nil)
+                    button.soundPreviewRegion:ClearAllPoints()
+                    button.soundPreviewRegion = nil
+                end
+                
+                -- Create clickable preview region
+                button.soundPreviewRegion = CreateFrame("Button", nil, button)
                     button.soundPreviewRegion:SetSize(20, 20)
-                    button.soundPreviewRegion:SetPoint("RIGHT", -2, 0)
+                    button.soundPreviewRegion:SetPoint("RIGHT", button, "RIGHT", -2, 0)
+                    button.soundPreviewRegion:SetFrameLevel(button:GetFrameLevel() + 10)
                     
                     -- Highlight on hover
                     local highlight = button.soundPreviewRegion:CreateTexture(nil, "HIGHLIGHT")
                     highlight:SetAllPoints()
                     highlight:SetColorTexture(1, 1, 1, 0.3)
+                    
+                    -- Ensure region is hidden when button is hidden
+                    button.soundPreviewRegion:SetScript("OnHide", function(self)
+                        self:Hide()
+                        self:EnableMouse(false)
+                    end)
                     
                     button.soundPreviewRegion:SetScript("OnClick", function(self, btn)
                         if btn == "LeftButton" then
@@ -1065,7 +1098,6 @@ function wt:CreateUI()
                     button.soundPreviewRegion:SetScript("OnLeave", function(self)
                         GameTooltip:Hide()
                     end)
-                end
             end)
         end
         
