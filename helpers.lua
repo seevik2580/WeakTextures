@@ -3440,7 +3440,7 @@ function wt:InitializeTreeElement(button, node)
         if not button.selectedHighlight then
             button.selectedHighlight = button:CreateTexture(nil, "OVERLAY")
             button.selectedHighlight:SetAllPoints()
-            button.selectedHighlight:SetColorTexture(0, 0.6, 0, 0.25)  -- Dark green overlay
+            button.selectedHighlight:SetColorTexture(0, 0.6, 0, 0.15)  -- Dark green overlay
         end
         
         if data.selected then
