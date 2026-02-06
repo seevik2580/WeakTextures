@@ -542,10 +542,6 @@ end
 **Events to use:** `PLAYER_TARGET_CHANGED, UNIT_CLASSIFICATION_CHANGED`
 ```lua
 function(e)
-    if not UnitExists("target") then
-        return false
-    end
-    
     local texPrefix = "Interface\\AddOns\\YourAddon\\Media\\"
     local targetType = {
         ["elite"] = texPrefix .. "Elite.tga",
@@ -559,10 +555,10 @@ function(e)
     local texturePath = targetType[classification] or targetType["normal"]
     
     WeakTexturesAPI:CreateInstance({
-        texture = texturePath
+        texture = texturePath  -- you can use full path or LSM names.
     })
     
-    return true
+    WeakTexturesAPI:RefreshPreset(true) -- instead of ordinary "return true", use this to refresh new texture defined in CreateInstance
 end
 ```
 

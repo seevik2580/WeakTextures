@@ -495,6 +495,109 @@ end",
       ["originalGroup"] = "Examples/Advanced",
       ["group"] = "Examples/Advanced",
     },
+    ["Example - Advanced - target type"] = {
+      ["strata"] = "HIGH",
+      ["scale"] = 1,
+      ["duration"] = 0,
+      ["advancedEnabled"] = true,
+      ["instancePool"] = {
+        ["enabled"] = false,
+        ["maxInstances"] = 10,
+      },
+      ["angle"] = 0,
+      ["sound"] = {
+        ["channel"] = "Master",
+      },
+      ["textures"] = {
+        [1] = {
+          ["y"] = 0,
+          ["x"] = 0,
+          ["anchor"] = "TargetFrame",
+          ["height"] = 100,
+          ["width"] = 231,
+          ["texture"] = "Blizzard Dialog Background Gold",
+        },
+      },
+      ["type"] = "static",
+      ["frameLevel"] = 100,
+      ["group"] = "Examples/Advanced",
+      ["trigger"] = "function(e)\
+  if e == \"PLAYER_TARGET_CHANGED\" then\
+    local targetType = {\
+      [\"elite\"] = \"Blizzard Collections Background\",\
+      [\"worldboss\"] =\"Blizzard Dialog Background\",\
+      [\"rareelite\"] = \"Blizzard Dialog Background Dark\",\
+      [\"rare\"] =  \"Blizzard Dialog Background\",\
+      [\"normal\"] =  \"Blizzard Dialog Background Gold\",\
+    }\
+    \
+    local classification = UnitClassification(\"target\")\
+    local texturePath = targetType[classification] or targetType[\"normal\"]\
+    WeakTexturesAPI:CreateInstance({\
+        texture = texturePath\
+    })\
+    \
+    WeakTexturesAPI:RefreshPreset(true)\
+  end\
+end\
+\
+\
+",
+      ["text"] = {
+        ["enabled"] = true,
+        ["font"] = "Friz Quadrata TT",
+        ["offsetX"] = 0,
+        ["outline"] = "OUTLINE",
+        ["color"] = {
+          ["a"] = 1,
+          ["b"] = 0,
+          ["g"] = 0.82,
+          ["r"] = 1,
+        },
+        ["offsetY"] = 0,
+        ["content"] = "",
+        ["size"] = 10,
+      },
+      ["alpha"] = 1,
+      ["eventHandles"] = {
+        [1] = {
+          ["event"] = "PLAYER_TARGET_CHANGED",
+        },
+      },
+      ["events"] = {
+        [1] = "PLAYER_TARGET_CHANGED",
+      },
+      ["enabled"] = false,
+      ["version"] = 2,
+      ["originalGroup"] = "Examples/Advanced",
+      ["example"] = true,
+      ["conditions"] = {
+        ["combat"] = false,
+        ["zone"] = "",
+        ["encounter"] = false,
+        ["nothousing"] = false,
+        ["notVehicle"] = false,
+        ["notCombat"] = false,
+        ["alive"] = false,
+        ["vehicle"] = false,
+        ["dead"] = false,
+        ["housing"] = false,
+        ["instance"] = false,
+        ["notPetBattle"] = false,
+        ["notEncounter"] = false,
+        ["playerName"] = "",
+        ["petBattle"] = false,
+        ["notInstance"] = false,
+        ["rested"] = false,
+        ["notRested"] = false,
+      },
+      ["color"] = {
+        ["a"] = 1,
+        ["b"] = 1,
+        ["g"] = 1,
+        ["r"] = 1,
+      },
+    },
   },
   ["groups"] = {
     ["Examples/Advanced"] = true,

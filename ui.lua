@@ -812,6 +812,7 @@ function wt:CreateUI()
             content.anchorEdit:SetText("UIParent")
             content.anchorEdit:Hide()
             content.selectFrameBtn:Hide()
+            content.hideWithParentCheck:Hide()
         end)
         
         rootDescription:CreateRadio(L.ANCHOR_CUSTOM_FRAME, function() return dropdown.selectedValue == "Custom" end, function()
@@ -823,6 +824,7 @@ function wt:CreateUI()
             end
             content.anchorEdit:Show()
             content.selectFrameBtn:Show()
+            content.hideWithParentCheck:Show()
         end)
     end)
 
@@ -839,6 +841,13 @@ function wt:CreateUI()
     content.selectFrameBtn:SetPoint("LEFT", content.anchorEdit, "RIGHT", 5, 0)
     content.selectFrameBtn:SetScript("OnClick", function() wt:StartFrameChooser() end)
     content.selectFrameBtn:Hide()  -- Hidden by default
+
+    -- Hide with parent checkbox
+    content.hideWithParentCheck = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
+    content.hideWithParentCheck:SetPoint("BOTTOMLEFT", content.anchorEdit, "BOTTOMLEFT", -9, 16)
+    content.hideWithParentCheck:SetChecked(true)  -- Default: checked (normal behavior)
+    content.hideWithParentCheck.text:SetText(L.CHECKBOX_HIDE_WITH_PARENT)
+    content.hideWithParentCheck:Hide()  -- Hidden by default
 
     -- === TEXT SETTINGS ===
     content.textHeader = wt:CreateHeader(content, L.HEADER_TEXT_SETTINGS)

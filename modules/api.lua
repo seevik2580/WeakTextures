@@ -153,9 +153,12 @@ function WeakTexturesAPI:EnableMultiInstance(presetName, maxInstances)
     
     local preset = WeakTexturesDB.presets[presetName]
     
-    -- Migrate to v2 if needed
-    if not wt:IsPresetV2(preset) then
-        wt:MigratePresetToV2(preset)
+    -- Ensure instancePool exists (even if preset is v2, text/sounds might exist without instancePool)
+    if not preset.instancePool then
+        preset.instancePool = {
+            enabled = false,
+            maxInstances = 10
+        }
     end
     
     -- Enable multi-instance mode
@@ -419,6 +422,12 @@ function WeakTexturesAPI:CreateInstance(data)
             if data.timeline then
                 preset.timeline = data.timeline
             end
+            
+            -- If frame already exists, update it immediately without restarting
+            local container = wt.activeFramesByPreset[presetName]
+            if container and container.frame then
+                wt:UpdateExistingFrame(presetName, container, data)
+            end
         end
         return true
     end
@@ -444,7 +453,33 @@ function WeakTexturesAPI:RefreshPreset(showTexture)
     
     preset.lastTriggerResult = showTexture
     if showTexture then
-        wt:ApplyPreset(presetName)
+        -- For single-instance mode with existing frame, check if we need to update it first
+        local container = wt.activeFramesByPreset[presetName]
+        local frameExists = container and container.frame
+        local isMultiInstance = preset.instancePool and preset.instancePool.enabled
+        
+        if frameExists and not isMultiInstance then
+            -- Single-instance mode with existing frame
+            -- If CreateInstance was called with new data (tempOverrides exist), apply them
+            if preset.tempOverrides then
+                wt:UpdateExistingFrame(presetName, container, preset.tempOverrides)
+                -- Clear tempOverrides after applying
+                preset.tempOverrides = nil
+            end
+            -- Ensure frame is visible
+            container.frame:Show()
+        else
+            -- Multi-instance mode OR first time showing: call ApplyPreset
+            wt:ApplyPreset(presetName)
+            
+            -- If single-instance mode, ensure frame is shown after creation
+            if not isMultiInstance then
+                local container = wt.activeFramesByPreset[presetName]
+                if container and container.frame then
+                    container.frame:Show()
+                end
+            end
+        end
         
         -- Cancel existing timeline timers if any
         if preset.timelineTimers then

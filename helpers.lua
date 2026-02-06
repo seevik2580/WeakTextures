@@ -500,10 +500,54 @@ function wt:CreateAnchoredTexture(presetName, anchorName, texturePath, width, he
         if preset.tempOverrides.offsetY then y = y + preset.tempOverrides.offsetY end
         if preset.tempOverrides.scale then scale = preset.tempOverrides.scale end
     end
+    
+    -- Check hideWithParent flag to determine parent and position
+    local data = preset and preset.textures and preset.textures[1]
+    local hideWithParent = data and data.hideWithParent
+    if hideWithParent == nil then
+        hideWithParent = true  -- Default to true (normal behavior)
+    end
+    
+    local actualParent = anchor
+    local finalX = x
+    local finalY = y
+    local scaleRatio = nil  -- Store scale ratio for later
+
+    -- If hideWithParent is false, use UIParent as parent but calculate position from anchor
+    if not hideWithParent then
+        actualParent = UIParent
+        
+        -- Get anchor center position relative to screen
+        local anchorCenterX, anchorCenterY = anchor:GetCenter()
+        local anchorScale = anchor:GetEffectiveScale()
+        local uiParentScale = UIParent:GetEffectiveScale()
+        
+        -- Store scale ratio for setting frame scale later
+        scaleRatio = anchorScale / uiParentScale
+        
+        if anchorCenterX and anchorCenterY then
+            -- Convert anchor center to scale 1 (absolute pixels)
+            local anchorAbsX = anchorCenterX * anchorScale
+            local anchorAbsY = anchorCenterY * anchorScale
+            
+            -- Get UIParent center and convert to scale 1
+            local uiParentCenterX, uiParentCenterY = UIParent:GetCenter()
+            local uiParentAbsX = uiParentCenterX * uiParentScale
+            local uiParentAbsY = uiParentCenterY * uiParentScale
+            
+            -- Calculate offset in scale 1 (absolute pixels)
+            local offsetAbsX = anchorAbsX - uiParentAbsX
+            local offsetAbsY = anchorAbsY - uiParentAbsY
+            
+            -- Convert back to UIParent scale and add user offset
+            finalX = (offsetAbsX / uiParentScale) + x
+            finalY = (offsetAbsY / uiParentScale) + y
+        end
+    end
 
     -- Texture is created only once, after that its only updated
     if not f then
-        f = CreateFrame("Frame", nil, anchor)
+        f = CreateFrame("Frame", nil, actualParent)
         f:SetFrameStrata(strata)
         f:SetFrameLevel(frameLevel)
 
@@ -517,24 +561,39 @@ function wt:CreateAnchoredTexture(presetName, anchorName, texturePath, width, he
         container.frame = f
         container.isLocked = true
     else
-        -- Restore parent if it was removed by HideTextureFrame
-        if f:GetParent() ~= anchor then
-            f:SetParent(anchor)
+        -- Update parent if hideWithParent changed
+        if f:GetParent() ~= actualParent then
+            f:SetParent(actualParent)
         end
     end
 
     -- Update existing texture
     local absWidth = math.abs(width)
     local absHeight = math.abs(height)
+    
+    -- If using UIParent as parent, scale the texture size to match what anchor would have
+    if scaleRatio then
+        absWidth = absWidth * scaleRatio
+        absHeight = absHeight * scaleRatio
+    end
+    
     f:SetSize(absWidth, absHeight)
     f:ClearAllPoints()
-    f:SetPoint("CENTER", anchor, "CENTER", x, y)
+    f:SetPoint("CENTER", actualParent, "CENTER", finalX, finalY)
     f:SetFrameStrata(strata)
     f:SetFrameLevel(frameLevel)
     
     -- Apply temp texture override if exists
     if preset and preset.tempOverrides and preset.tempOverrides.texture then
         texturePath = preset.tempOverrides.texture
+    end
+    
+    -- If texture name has no slashes, try LSM lookup
+    if not texturePath:find("[/\\]") then
+        local lsmTexture = self.LSM:Fetch("background", texturePath)
+        if lsmTexture then
+            texturePath = lsmTexture
+        end
     end
     
     f.texture:SetTexture(texturePath)
@@ -744,6 +803,28 @@ function wt:CreateAnchoredTexture(presetName, anchorName, texturePath, width, he
             wt:PlayPresetSound(presetName, nil, preset.tempOverrides.soundChannel or "Master", preset.tempOverrides.sound)
         end
         
+        -- In single-instance mode, copy tempOverrides to main preset data so changes persist
+        if not (preset.instancePool and preset.instancePool.enabled) then
+            if preset.tempOverrides.texture then
+                preset.textures[1].texture = preset.tempOverrides.texture
+            end
+            if preset.tempOverrides.anchor then
+                preset.textures[1].anchor = preset.tempOverrides.anchor
+            end
+            if preset.tempOverrides.width then
+                preset.textures[1].width = preset.tempOverrides.width
+            end
+            if preset.tempOverrides.height then
+                preset.textures[1].height = preset.tempOverrides.height
+            end
+            if preset.tempOverrides.x ~= nil then
+                preset.textures[1].x = preset.tempOverrides.x
+            end
+            if preset.tempOverrides.y ~= nil then
+                preset.textures[1].y = preset.tempOverrides.y
+            end
+        end
+        
         preset.tempOverrides = nil
     end
 end
@@ -796,10 +877,54 @@ function wt:PlayStopMotion(presetName, anchorName, texturePath, width, height, x
         if preset.tempOverrides.offsetY then y = y + preset.tempOverrides.offsetY end
         if preset.tempOverrides.scale then scale = preset.tempOverrides.scale end
     end
+    
+    -- Check hideWithParent flag to determine parent and position
+    local data = preset and preset.textures and preset.textures[1]
+    local hideWithParent = data and data.hideWithParent
+    if hideWithParent == nil then
+        hideWithParent = true  -- Default to true (normal behavior)
+    end
+    
+    local actualParent = anchor
+    local finalX = x
+    local finalY = y
+    local scaleRatio = nil  -- Store scale ratio for later
+
+    -- If hideWithParent is false, use UIParent as parent but calculate position from anchor
+    if not hideWithParent then
+        actualParent = UIParent
+        
+        -- Get anchor center position relative to screen
+        local anchorCenterX, anchorCenterY = anchor:GetCenter()
+        local anchorScale = anchor:GetEffectiveScale()
+        local uiParentScale = UIParent:GetEffectiveScale()
+        
+        -- Store scale ratio for setting frame scale later
+        scaleRatio = anchorScale / uiParentScale
+        
+        if anchorCenterX and anchorCenterY then
+            -- Convert anchor center to scale 1 (absolute pixels)
+            local anchorAbsX = anchorCenterX * anchorScale
+            local anchorAbsY = anchorCenterY * anchorScale
+            
+            -- Get UIParent center and convert to scale 1
+            local uiParentCenterX, uiParentCenterY = UIParent:GetCenter()
+            local uiParentAbsX = uiParentCenterX * uiParentScale
+            local uiParentAbsY = uiParentCenterY * uiParentScale
+            
+            -- Calculate offset in scale 1 (absolute pixels)
+            local offsetAbsX = anchorAbsX - uiParentAbsX
+            local offsetAbsY = anchorAbsY - uiParentAbsY
+            
+            -- Convert back to UIParent scale and add user offset
+            finalX = (offsetAbsX / uiParentScale) + x
+            finalY = (offsetAbsY / uiParentScale) + y
+        end
+    end
 
     -- Texture is created only once, after that its only updated
     if not f then
-        f = CreateFrame("Frame", nil, anchor)
+        f = CreateFrame("Frame", nil, actualParent)
         f:SetFrameStrata(strata)
         f:SetFrameLevel(frameLevel)
 
@@ -817,20 +942,36 @@ function wt:PlayStopMotion(presetName, anchorName, texturePath, width, height, x
         container.frame = f
         container.isLocked = true
     else
-        -- Restore parent if it was removed by HideTextureFrame
-        if f:GetParent() ~= anchor then
-            f:SetParent(anchor)
+        -- Update parent if hideWithParent changed
+        if f:GetParent() ~= actualParent then
+            f:SetParent(actualParent)
         end
     end
 
     -- Update existing texture
     local absWidth = math.abs(width)
     local absHeight = math.abs(height)
+    
+    -- If using UIParent as parent, scale the texture size to match what anchor would have
+    if scaleRatio then
+        absWidth = absWidth * scaleRatio
+        absHeight = absHeight * scaleRatio
+    end
+    
     f:SetSize(absWidth, absHeight)
     f:ClearAllPoints()
-    f:SetPoint("CENTER", anchor, "CENTER", x, y)
+    f:SetPoint("CENTER", actualParent, "CENTER", finalX, finalY)
     f:SetFrameStrata(strata)
     f:SetFrameLevel(frameLevel)
+    
+    -- If texture name has no slashes, try LSM lookup
+    if not texturePath:find("[/\\]") then
+        local lsmTexture = self.LSM:Fetch("background", texturePath)
+        if lsmTexture then
+            texturePath = lsmTexture
+        end
+    end
+    
     f.texture:SetTexture(texturePath)
     
     -- Set vertex color (applies to entire texture, not per-frame)
@@ -1028,6 +1169,28 @@ function wt:PlayStopMotion(presetName, anchorName, texturePath, width, height, x
     
     -- Clear temp overrides after applying
     if preset and preset.tempOverrides then
+        -- In single-instance mode, copy tempOverrides to main preset data so changes persist
+        if not (preset.instancePool and preset.instancePool.enabled) then
+            if preset.tempOverrides.texture then
+                preset.textures[1].texture = preset.tempOverrides.texture
+            end
+            if preset.tempOverrides.anchor then
+                preset.textures[1].anchor = preset.tempOverrides.anchor
+            end
+            if preset.tempOverrides.width then
+                preset.textures[1].width = preset.tempOverrides.width
+            end
+            if preset.tempOverrides.height then
+                preset.textures[1].height = preset.tempOverrides.height
+            end
+            if preset.tempOverrides.x ~= nil then
+                preset.textures[1].x = preset.tempOverrides.x
+            end
+            if preset.tempOverrides.y ~= nil then
+                preset.textures[1].y = preset.tempOverrides.y
+            end
+        end
+        
         preset.tempOverrides = nil
     end
 end
@@ -1948,6 +2111,8 @@ function wt:OnAddTextureClick()
         else
             WeakTexturesDB.presets[newPresetName] = { textures = {}, group = nil, enabled = true, type = "static" }
             wt.selectedPreset = newPresetName
+            -- Migrate new preset to v2 structure
+            wt:MigratePresetToV2(WeakTexturesDB.presets[newPresetName])
         end
     end
 
@@ -2124,7 +2289,8 @@ function wt:OnAddTextureClick()
         width = width,
         height = height,
         x = x,
-        y = y
+        y = y,
+        hideWithParent = wt.frame.right.configPanelContent.hideWithParentCheck:GetChecked()
     }
     
     -- Text settings (stored separately in preset.text)

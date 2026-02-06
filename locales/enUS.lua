@@ -65,6 +65,7 @@ L.LABEL_LEVEL = "Level"
 L.LABEL_ANCHOR_FRAME = "Anchor Frame"
 L.ANCHOR_SCREEN = "Screen"
 L.ANCHOR_CUSTOM_FRAME = "Custom frame"
+L.CHECKBOX_HIDE_WITH_PARENT = "Hide with parent"
 L.BUTTON_SELECT = "Select"
 
 -- Visual Settings

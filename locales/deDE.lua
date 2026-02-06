@@ -60,6 +60,7 @@ L.LABEL_LEVEL = "Ebene"
 L.LABEL_ANCHOR_FRAME = "Anker-Fenster"
 L.ANCHOR_SCREEN = "Bildschirm"
 L.ANCHOR_CUSTOM_FRAME = "Benutzerdefiniertes Fenster"
+L.CHECKBOX_HIDE_WITH_PARENT = "Mit Elternelement verstecken"
 L.BUTTON_SELECT = "Auswählen"
 
 -- Visual Settings

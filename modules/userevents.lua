@@ -503,32 +503,39 @@ function wt:RegisterPresetEvents(presetName)
                 end
                 
                 local ok, r = pcall(func, eventName, ...)
-                preset.lastTriggerResult = ok and r or false
                 
-                -- Update preset visibility based on trigger result
-                if preset.lastTriggerResult then
-                    wt:ApplyPreset(presetName)
+                -- For event handler triggers, RefreshPreset already manages visibility
+                -- Don't override lastTriggerResult if trigger uses RefreshPreset API
+                -- Only update if trigger explicitly returns a boolean value
+                if r ~= nil then
+                    preset.lastTriggerResult = ok and r or false
                     
-                    -- Cancel existing auto-hide timer if any
-                    if preset.autoHideTimer then
-                        preset.autoHideTimer:Cancel()
-                        preset.autoHideTimer = nil
-                    end
-                    
-                    -- Start auto-hide timer if duration is set
-                    local duration = preset.duration
-                    if duration and duration > 0 then
-                        preset.autoHideTimer = C_Timer.NewTimer(duration, function()
-                            wt:HideTextureFrame(presetName)
+                    -- Update preset visibility based on trigger return value
+                    if preset.lastTriggerResult then
+                        wt:ApplyPreset(presetName)
+                        
+                        -- Cancel existing auto-hide timer if any
+                        if preset.autoHideTimer then
+                            preset.autoHideTimer:Cancel()
                             preset.autoHideTimer = nil
-                        end)
-                    end
-                else
-                    -- Don't auto-hide multi-instance presets or presets with active timeline
-                    if not (preset.instancePool and preset.instancePool.enabled) and not preset.timelineTimers then
-                        wt:HideTextureFrame(presetName)
+                        end
+                        
+                        -- Start auto-hide timer if duration is set
+                        local duration = preset.duration
+                        if duration and duration > 0 then
+                            preset.autoHideTimer = C_Timer.NewTimer(duration, function()
+                                wt:HideTextureFrame(presetName)
+                                preset.autoHideTimer = nil
+                            end)
+                        end
+                    else
+                        -- Don't auto-hide multi-instance presets or presets with active timeline
+                        if not (preset.instancePool and preset.instancePool.enabled) and not preset.timelineTimers then
+                            wt:HideTextureFrame(presetName)
+                        end
                     end
                 end
+                -- If r is nil, trigger manages visibility itself via RefreshPreset
             end
         else
             -- Simple trigger that returns a value

@@ -76,21 +76,35 @@ function wt:ApplyPreset(presetName)
     end
 
     local data = preset.textures[1]
-    wt:Debug("ApplyPreset: Creating texture for", presetName, "anchor:", data.anchor, "texture:", data.texture)
+    
+    -- Use tempOverrides if they exist (from CreateInstance in single-instance mode)
+    local texture = (preset.tempOverrides and preset.tempOverrides.texture) or data.texture
+    local anchor = (preset.tempOverrides and preset.tempOverrides.anchor) or data.anchor
+    local width = (preset.tempOverrides and preset.tempOverrides.width) or data.width
+    local height = (preset.tempOverrides and preset.tempOverrides.height) or data.height
+    local x = (preset.tempOverrides and preset.tempOverrides.x) or data.x
+    local y = (preset.tempOverrides and preset.tempOverrides.y) or data.y
+    
+    wt:Debug("ApplyPreset: Creating texture for", presetName, "anchor:", anchor, "texture:", texture)
 
-    if preset.type == "motion" then
+    local animType = (preset.tempOverrides and preset.tempOverrides.type) or preset.type
+    if animType == "motion" then
         wt:Debug("ApplyPreset: Playing stop motion")
-        self:PlayStopMotion(presetName, data.anchor, data.texture, data.width, data.height, data.x, data.y, preset.columns or 1, preset.rows or 1, preset.totalFrames or 1, preset.fps or 30)
+        local columns = (preset.tempOverrides and preset.tempOverrides.columns) or preset.columns or 1
+        local rows = (preset.tempOverrides and preset.tempOverrides.rows) or preset.rows or 1
+        local totalFrames = (preset.tempOverrides and preset.tempOverrides.totalFrames) or preset.totalFrames or 1
+        local fps = (preset.tempOverrides and preset.tempOverrides.fps) or preset.fps or 30
+        self:PlayStopMotion(presetName, anchor, texture, width, height, x, y, columns, rows, totalFrames, fps)
     else
         wt:Debug("ApplyPreset: Creating static texture")
         self:CreateAnchoredTexture(
             presetName,
-            data.anchor,
-            data.texture,
-            data.width,
-            data.height,
-            data.x,
-            data.y
+            anchor,
+            texture,
+            width,
+            height,
+            x,
+            y
         )
     end
     
@@ -200,10 +214,14 @@ function wt:LoadPresetIntoFields(presetName)
             wt.frame.right.configPanelContent.anchorTypeDropDown.selectedValue = "Screen"
             wt.frame.right.configPanelContent.anchorEdit:Hide()
             wt.frame.right.configPanelContent.selectFrameBtn:Hide()
+            wt.frame.right.configPanelContent.hideWithParentCheck:Hide()
         else
             wt.frame.right.configPanelContent.anchorTypeDropDown.selectedValue = "Custom"
             wt.frame.right.configPanelContent.anchorEdit:Show()
             wt.frame.right.configPanelContent.selectFrameBtn:Show()
+            wt.frame.right.configPanelContent.hideWithParentCheck:Show()
+            -- Set checkbox state (default to true if not set)
+            wt.frame.right.configPanelContent.hideWithParentCheck:SetChecked(data.hideWithParent ~= false)
         end
         
         -- Check if texture is from LSM or WeakTexturesCustomTextures
