@@ -67,6 +67,13 @@ function wt:LoadProfile(profileName)
         profileName = "Default"
     end
     
+    -- Unregister all events from old profile BEFORE loading new profile
+    if WeakTexturesDB and WeakTexturesDB.presets then
+        for presetName, preset in pairs(WeakTexturesDB.presets) do
+            wt:DeRegisterPresetEvents(presetName)
+        end
+    end
+    
     -- Save current active profile name
     WeakTexturesCharacter.activeProfile = profileName
     
